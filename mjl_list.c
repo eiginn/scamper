@@ -2,7 +2,7 @@
  * linked list routines
  * by Matthew Luckie
  *
- * Copyright (C) 2004-2015 Matthew Luckie. All rights reserved.
+ * Copyright (C) 2004-2016 Matthew Luckie. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,7 +29,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: mjl_list.c,v 1.68.4.3 2016/01/08 08:01:28 mjl Exp $";
+  "$Id: mjl_list.c,v 1.74 2016/01/18 04:46:07 mjl Exp $";
 #endif
 
 #include <stdlib.h>
@@ -525,14 +525,14 @@ void *slist_head_pop(slist_t *list)
   return item;
 }
 
-void *slist_head_get(const slist_t *list)
+void *slist_head_item(const slist_t *list)
 {
   assert(list != NULL);
   if(list->head == NULL) return NULL;
   return list->head->item;
 }
 
-void *slist_tail_get(const slist_t *list)
+void *slist_tail_item(const slist_t *list)
 {
   assert(list != NULL);
   if(list->tail == NULL) return NULL;
@@ -1237,7 +1237,7 @@ void dlist_node_eject(dlist_t *list, dlist_node_t *node)
   return;
 }
 
-void *dlist_head_get(const dlist_t *list)
+void *dlist_head_item(const dlist_t *list)
 {
   assert(list != NULL);
   if(list->head == NULL) return NULL;
@@ -1250,7 +1250,7 @@ dlist_node_t *dlist_head_node(const dlist_t *list)
   return list->head;
 }
 
-void *dlist_tail_get(const dlist_t *list)
+void *dlist_tail_item(const dlist_t *list)
 {
   assert(list != NULL);
   if(list->tail == NULL) return NULL;
@@ -1320,7 +1320,7 @@ static void dlist_rebuild(dlist_t *list, dlist_node_t **v)
   list->tail = v[list->length-1];
   list->tail->next = NULL;
   list->head->prev = NULL;
-  for(i=0; i<list->length-1; i++)
+  for(i=0; i<list->length; i++)
     {
       if(i > 0)
 	v[i]->prev = v[i-1];
@@ -1609,7 +1609,7 @@ clist_node_t *clist_head_push(clist_t *list, void *item)
   return node;
 }
 
-void *clist_head_get(const clist_t *list)
+void *clist_head_item(const clist_t *list)
 {
   assert(list != NULL);
   if(list->head == NULL) return NULL;
@@ -1622,7 +1622,7 @@ clist_node_t *clist_head_node(const clist_t *list)
   return list->head;
 }
 
-void *clist_tail_get(const clist_t *list)
+void *clist_tail_item(const clist_t *list)
 {
   assert(list != NULL);
   if(list->head == NULL) return NULL;

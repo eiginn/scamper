@@ -90,7 +90,7 @@ host_triplet = @host@
 subdir = utils
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_openssl.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/ax_gcc_builtin.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -307,11 +307,15 @@ SUBDIRS = \
 	sc_ally \
 	sc_analysis_dump \
 	sc_attach \
+	sc_bdrmap \
 	sc_filterpolicy \
 	sc_ipiddump \
+	sc_prefixscan \
+	sc_radargun \
+	sc_remoted \
 	sc_speedtrap \
-	sc_tracediff \
 	sc_tbitblind \
+	sc_tracediff \
 	sc_warts2csv \
 	sc_warts2json \
 	sc_warts2pcap \

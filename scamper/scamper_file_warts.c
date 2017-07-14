@@ -3,11 +3,12 @@
  *
  * the warts file format
  *
- * $Id: scamper_file_warts.c,v 1.243.2.2 2016/01/08 08:29:27 mjl Exp $
+ * $Id: scamper_file_warts.c,v 1.252.2.1 2017/06/22 08:34:33 mjl Exp $
  *
  * Copyright (C) 2004-2006 Matthew Luckie
  * Copyright (C) 2006-2011 The University of Waikato
  * Copyright (C) 2012-2015 The Regents of the University of California
+ * Copyright (C) 2015-2016 Matthew Luckie
  * Author: Matthew Luckie
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,7 +28,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: scamper_file_warts.c,v 1.243.2.2 2016/01/08 08:29:27 mjl Exp $";
+  "$Id: scamper_file_warts.c,v 1.252.2.1 2017/06/22 08:34:33 mjl Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -93,18 +94,18 @@ static const warts_var_t cycle_vars[] =
 
 typedef int (*warts_obj_read_t)(scamper_file_t *,const warts_hdr_t *,void **);
 
+struct warts_addrtable
+{
+  splaytree_t   *tree;
+  warts_addr_t **addrs;
+  int            addrc;
+};
+
 void flag_ij(const int id, int *i, int *j)
 {
-  if(id % 7 == 0)
-    {
-      *i = (id / 7) - 1;
-      *j = 7;
-    }
-  else
-    {
-      *i = id / 7;
-      *j = id % 7;
-    }
+  int x = id - 1;
+  *i = (x / 7);
+  *j = id - (*i * 7);
   return;
 }
 
@@ -211,39 +212,66 @@ static void warts_addr_free(warts_addr_t *wa)
 
 uint32_t warts_addr_size(warts_addrtable_t *t, scamper_addr_t *addr)
 {
-  warts_addr_t f, *wa;
+  warts_addr_t fm, *wa;
 
-  f.addr = addr;
-  if(array_find((void **)t->addrs, t->addrc, &f,
-		(array_cmp_t)warts_addr_cmp) != NULL)
-    {
-      return 1 + 4;
-    }
+  fm.addr = addr;
+  if(splaytree_find(t->tree, &fm) != NULL)
+    return 1 + 4;
 
-  if((wa = warts_addr_alloc(addr, t->addrc)) != NULL &&
-     array_insert((void ***)&t->addrs, &t->addrc, wa,
-		  (array_cmp_t)warts_addr_cmp) != 0)
-    {
-      warts_addr_free(wa);
-    }
+  if((wa = warts_addr_alloc(addr, splaytree_count(t->tree))) != NULL &&
+     splaytree_insert(t->tree, wa) == NULL)
+    warts_addr_free(wa);
 
   return 1 + 1 + scamper_addr_size(addr);
 }
 
-void warts_addrtable_clean(warts_addrtable_t *table)
+warts_addrtable_t *warts_addrtable_alloc_byaddr(void)
+{
+  warts_addrtable_t *table;
+  if((table = malloc(sizeof(warts_addrtable_t))) == NULL)
+    return NULL;
+  table->addrs = NULL;
+  table->addrc = 0;
+  if((table->tree = splaytree_alloc((splaytree_cmp_t)warts_addr_cmp))==NULL)
+    {
+      free(table);
+      return NULL;
+    }
+  return table;
+}
+
+warts_addrtable_t *warts_addrtable_alloc_byid(void)
+{
+  warts_addrtable_t *table;
+  if((table = malloc(sizeof(warts_addrtable_t))) == NULL)
+    return NULL;
+  table->addrs = NULL;
+  table->addrc = 0;
+  table->tree = NULL;
+  return table;
+}
+
+void warts_addrtable_free(warts_addrtable_t *table)
 {
   int i;
+  if(table == NULL)
+    return;
+  if(table->tree != NULL)
+    {
+      splaytree_free(table->tree, (splaytree_free_t)warts_addr_free);
+    }
   if(table->addrs != NULL)
     {
       for(i=0; i<table->addrc; i++)
 	warts_addr_free(table->addrs[i]);
       free(table->addrs);
     }
+  free(table);
   return;
 }
 
 void insert_addr(uint8_t *buf, uint32_t *off, const uint32_t len,
-			const scamper_addr_t *addr, void *param)
+		 const scamper_addr_t *addr, void *param)
 {
   warts_addrtable_t *table = param;
   warts_addr_t *wa, f;
@@ -254,8 +282,7 @@ void insert_addr(uint8_t *buf, uint32_t *off, const uint32_t len,
   assert(len - *off >= 1 + 1);
 
   f.addr = (scamper_addr_t *)addr;
-  wa = array_find((void **)table->addrs, table->addrc, &f,
-		  (array_cmp_t)warts_addr_cmp);
+  wa = splaytree_find(table->tree, &f);
   assert(wa != NULL);
 
   if(wa->ondisk == 0)
@@ -388,7 +415,7 @@ void insert_rtt(uint8_t *buf, uint32_t *off, const uint32_t len,
 }
 
 int extract_addr(const uint8_t *buf, uint32_t *off,
-			const uint32_t len, scamper_addr_t **out, void *param)
+		 const uint32_t len, scamper_addr_t **out, void *param)
 {
   warts_addrtable_t *table = param;
   warts_addr_t *wa;
@@ -397,6 +424,10 @@ int extract_addr(const uint8_t *buf, uint32_t *off,
   uint8_t type;
 
   assert(table != NULL);
+
+  /* make sure the offset is sane */
+  if(*off >= len)
+    return -1;
 
   /* make sure there is enough data left for the address header */
   if(len - *off < 1)
@@ -414,7 +445,11 @@ int extract_addr(const uint8_t *buf, uint32_t *off,
       if(len - *off < 4)
 	return -1;
 
+      /* load the index value out, and sanity check it */
       memcpy(&u32, &buf[*off], 4); u32 = ntohl(u32);
+      if(u32 >= table->addrc)
+	return -1;
+
       *out = scamper_addr_use(table->addrs[u32]->addr);
       *off += 4;
       return 0;
@@ -422,9 +457,12 @@ int extract_addr(const uint8_t *buf, uint32_t *off,
 
   /*
    * we have an address defined inline.  extract the address out and store
-   * it in a table, incase it is referenced shortly
+   * it in a table, incase it is referenced shortly.  sanity check the type
+   * of address
    */
   type = buf[(*off)++];
+  if(type == 0 || type > SCAMPER_ADDR_TYPE_MAX)
+    return -1;
   if((wa = malloc_zero(sizeof(warts_addr_t))) == NULL ||
      (wa->addr = scamper_addr_alloc(type, &buf[*off])) == NULL ||
      array_insert((void ***)&table->addrs, &table->addrc, wa, NULL) != 0)
@@ -471,7 +509,7 @@ int extract_string(const uint8_t *buf, uint32_t *off,
 int extract_uint16(const uint8_t *buf, uint32_t *off,
 		   const uint32_t len, uint16_t *out, void *param)
 {
-  if(len - *off < 2)
+  if(*off >= len || len - *off < 2)
     return -1;
   memcpy(out, buf + *off, 2); *off += 2;
   *out = ntohs(*out);
@@ -481,7 +519,7 @@ int extract_uint16(const uint8_t *buf, uint32_t *off,
 int extract_uint32(const uint8_t *buf, uint32_t *off,
 		   const uint32_t len, uint32_t *out, void *param)
 {
-  if(len - *off < 4)
+  if(*off >= len || len - *off < 4)
     return -1;
   memcpy(out, buf + *off, 4); *off += 4;
   *out = ntohl(*out);
@@ -492,7 +530,7 @@ int extract_int32(const uint8_t *buf, uint32_t *off,
 		  const uint32_t len, int32_t *out, void *param)
 {
   uint32_t u32;
-  if(len - *off < 4)
+  if(*off >= len || len - *off < 4)
     return -1;
   memcpy(&u32, buf + *off, 4); *off += 4;
   *out = (int32_t)ntohl(u32);
@@ -502,11 +540,8 @@ int extract_int32(const uint8_t *buf, uint32_t *off,
 int extract_byte(const uint8_t *buf, uint32_t *off,
 			const uint32_t len, uint8_t *out, void *param)
 {
-  if(len - *off < 1)
-    {
-      return -1;
-    }
-
+  if(*off >= len || len - *off < 1)
+    return -1;
   *out = buf[(*off)++];
   return 0;
 }
@@ -515,7 +550,7 @@ int extract_bytes_ptr(const uint8_t *buf, uint32_t *off,
 			     const uint32_t len, const uint8_t **out,
 			     uint16_t *req)
 {
-  if(len - *off < *req)
+  if(*off >= len || len - *off < *req)
     return -1;
 
   if(*req > 0)
@@ -531,10 +566,8 @@ int extract_bytes_alloc(const uint8_t *buf, uint32_t *off,
 			       const uint32_t len, uint8_t **out,
 			       uint16_t *req)
 {
-  if(len - *off < *req)
-    {
-      return -1;
-    }
+  if(*off >= len || len - *off < *req)
+    return -1;
 
   if(*req == 0)
     {
@@ -543,10 +576,7 @@ int extract_bytes_alloc(const uint8_t *buf, uint32_t *off,
   else
     {
       if((*out = malloc_zero(*req)) == NULL)
-	{
-	  return -1;
-	}
-
+	return -1;
       memcpy(*out, buf + *off, *req);
       *off += *req;
     }
@@ -562,7 +592,7 @@ int extract_bytes_alloc(const uint8_t *buf, uint32_t *off,
 int extract_bytes(const uint8_t *buf, uint32_t *off, const uint32_t len,
 			 uint8_t *out, uint16_t *req)
 {
-  if(len - *off < *req)
+  if(*off >= len || len - *off < *req)
     return -1;
 
   if(req == 0)
@@ -621,16 +651,12 @@ int extract_cycle(const uint8_t *buf, uint32_t *off,
   uint32_t id;
 
   if(extract_uint32(buf, off, len, &id, NULL) != 0)
-    {
-      return -1;
-    }
+    return -1;
 
-  if(id >= state->cycle_count)
-    {
-      return -1;
-    }
-
+  if(id >= state->cycle_count || state->cycle_table[id] == NULL)
+    return -1;
   *cycle = scamper_cycle_use(state->cycle_table[id]->cycle);
+
   return 0;
 }
 
@@ -836,6 +862,8 @@ int warts_read(scamper_file_t *sf, uint8_t **buf, size_t len)
   size_t         rc;
 
   *buf = NULL;
+  if(len == 0)
+    return -1;
 
   if(rf != NULL)
     {
@@ -1048,9 +1076,7 @@ int warts_addr_read(scamper_file_t *sf, const warts_hdr_t *hdr,
   if(buf == NULL)
     {
       if(addr_out != NULL)
-	{
-	  *addr_out = NULL;
-	}
+	*addr_out = NULL;
       return 0;
     }
 
@@ -1059,23 +1085,21 @@ int warts_addr_read(scamper_file_t *sf, const warts_hdr_t *hdr,
    * think it should be.
    */
   if(state->addr_count % 255 != buf[0])
-    {
-      goto err;
-    }
+    goto err;
 
+  /* sanity check the type of address */
+  if(buf[1] == 0 || buf[1] > SCAMPER_ADDR_TYPE_MAX)
+    goto err;
+  
   /* allocate a scamper address using the record read from disk */
   if((addr = scamper_addr_alloc(buf[1], buf+2)) == NULL)
-    {
-      goto err;
-    }
+    goto err;
 
   state->addr_table[state->addr_count++] = addr;
   free(buf);
 
   if(addr_out != NULL)
-    {
-      *addr_out = addr;
-    }
+    *addr_out = addr;
 
   return 0;
 
@@ -1085,10 +1109,8 @@ int warts_addr_read(scamper_file_t *sf, const warts_hdr_t *hdr,
   return -1;
 }
 
-int warts_list_cmp(const void *va, const void *vb)
+static int warts_list_cmp(const warts_list_t *wa, const warts_list_t *wb)
 {
-  const warts_list_t *wa = (const warts_list_t *)va;
-  const warts_list_t *wb = (const warts_list_t *)vb;
   return scamper_list_cmp(wa->list, wb->list);
 }
 
@@ -1119,28 +1141,31 @@ void warts_list_free(warts_list_t *wl)
  * file.
  */
 void warts_list_params(const scamper_list_t *list, uint8_t *flags,
-			      uint16_t *flags_len, uint16_t *params_len)
+		       uint16_t *flags_len, uint16_t *params_len)
 {
-  int max_id = 0;
+  const warts_var_t *var;
+  int i, max_id = 0;
 
   /* unset all the flags */
   memset(flags, 0, list_vars_mfb);
   *params_len = 0;
 
-  if(list->descr != NULL)
+  for(i=0; i<sizeof(list_vars)/sizeof(warts_var_t); i++)
     {
-      flag_set(flags, WARTS_LIST_DESCR,   &max_id);
-      *params_len += warts_str_size(list->descr);
-    }
-
-  if(list->monitor != NULL)
-    {
-      flag_set(flags, WARTS_LIST_MONITOR, &max_id);
-      *params_len += warts_str_size(list->monitor);
+      var = &list_vars[i];
+      if(var->id == WARTS_LIST_DESCR && list->descr != NULL)
+	{
+	  flag_set(flags, WARTS_LIST_DESCR, &max_id);
+	  *params_len += warts_str_size(list->descr);
+	}
+      else if(var->id == WARTS_LIST_MONITOR && list->monitor != NULL)
+	{
+	  flag_set(flags, WARTS_LIST_MONITOR, &max_id);
+	  *params_len += warts_str_size(list->monitor);
+	}
     }
 
   *flags_len = fold_flags(flags, max_id);
-
   return;
 }
 
@@ -1398,10 +1423,8 @@ int warts_list_getid(const scamper_file_t *sf, scamper_list_t *list,
   return -1;
 }
 
-int warts_cycle_cmp(const void *va, const void *vb)
+static int warts_cycle_cmp(const warts_cycle_t *a, const warts_cycle_t *b)
 {
-  const warts_cycle_t *a = (const warts_cycle_t *)va;
-  const warts_cycle_t *b = (const warts_cycle_t *)vb;
   return scamper_cycle_cmp(a->cycle, b->cycle);
 }
 
@@ -1426,29 +1449,29 @@ void warts_cycle_free(warts_cycle_t *cycle)
 void warts_cycle_params(const scamper_cycle_t *cycle, uint8_t *flags,
 			       uint16_t *flags_len, uint16_t *params_len)
 {
-  int max_id;
+  const warts_var_t *var;
+  int i, max_id = 0;
 
   /* unset all the flags, reset max_id */
   memset(flags, 0, cycle_vars_mfb);
-  max_id = 0;
-
   *params_len = 0;
 
-  if(cycle->hostname != NULL)
+  for(i=0; i<sizeof(cycle_vars)/sizeof(warts_var_t); i++)
     {
-      flag_set(flags, WARTS_CYCLE_HOSTNAME, &max_id);
-      *params_len += warts_str_size(cycle->hostname);
+      var = &cycle_vars[i];
+      if(var->id == WARTS_CYCLE_HOSTNAME && cycle->hostname != NULL)
+	{
+	  flag_set(flags, WARTS_CYCLE_HOSTNAME, &max_id);
+	  *params_len += warts_str_size(cycle->hostname);
+	}
+      else if(var->id == WARTS_CYCLE_STOP_TIME && cycle->stop_time != 0)
+	{
+	  flag_set(flags, WARTS_CYCLE_STOP_TIME, &max_id);
+	  *params_len += 4;
+	}
     }
 
-  if(cycle->stop_time != 0)
-    {
-      flag_set(flags, WARTS_CYCLE_STOP_TIME, &max_id);
-      *params_len += 4;
-    }
-
-  /* figure out how many bytes the flags will require */
   *flags_len = fold_flags(flags, max_id);
-
   return;
 }
 
@@ -1854,13 +1877,13 @@ int warts_icmpext_read(const uint8_t *buf, uint32_t *off, uint32_t len,
 
   *off += 2;
 
-  assert(tmp > 0);
+  /* the length value must be greater than zero */
+  if(tmp == 0)
+    return -1;
 
   /* make sure there's enough left for the extension data */
   if(len - *off < tmp)
-    {
-      return -1;
-    }
+    return -1;
 
   while(tmp >= 4)
     {
@@ -1891,7 +1914,9 @@ int warts_icmpext_read(const uint8_t *buf, uint32_t *off, uint32_t len,
       tmp  -= (2 + 1 + 1 + u16);
     }
 
-  assert(tmp == 0);
+  if(tmp != 0)
+    return -1;
+
   return 0;
 }
 
@@ -2151,11 +2176,11 @@ int scamper_file_warts_init_read(scamper_file_t *sf)
  */
 int scamper_file_warts_init_write(scamper_file_t *sf)
 {
-  warts_state_t *state = NULL;
+  warts_state_t *s = NULL;
   int fd = scamper_file_getfd(sf);
   struct stat sb;
 
-  if((state = (warts_state_t *)malloc_zero(sizeof(warts_state_t))) == NULL)
+  if((s = (warts_state_t *)malloc_zero(sizeof(warts_state_t))) == NULL)
     goto err;
 
   if(fd != -1)
@@ -2163,31 +2188,27 @@ int scamper_file_warts_init_write(scamper_file_t *sf)
       if(fstat(fd, &sb) != 0)
 	goto err;
       if(S_ISREG(sb.st_mode))
-	state->isreg = 1;
+	s->isreg = 1;
     }
 
-  if((state->list_tree = splaytree_alloc(warts_list_cmp)) == NULL)
-    {
-      goto err;
-    }
-  state->list_count = 1;
+  if((s->list_tree=splaytree_alloc((splaytree_cmp_t)warts_list_cmp)) == NULL)
+    goto err;
+  s->list_count = 1;
 
-  if((state->cycle_tree = splaytree_alloc(warts_cycle_cmp)) == NULL)
-    {
-      goto err;
-    }
-  state->cycle_count = 1;
+  if((s->cycle_tree=splaytree_alloc((splaytree_cmp_t)warts_cycle_cmp)) == NULL)
+    goto err;
+  s->cycle_count = 1;
 
-  scamper_file_setstate(sf, state);
+  scamper_file_setstate(sf, s);
 
   return 0;
 
  err:
-  if(state != NULL)
+  if(s != NULL)
     {
-      if(state->list_tree != NULL)  splaytree_free(state->list_tree, NULL);
-      if(state->cycle_tree != NULL) splaytree_free(state->cycle_tree, NULL);
-      free(state);
+      if(s->list_tree != NULL)  splaytree_free(s->list_tree, NULL);
+      if(s->cycle_tree != NULL) splaytree_free(s->cycle_tree, NULL);
+      free(s);
     }
   return -1;
 }
@@ -2199,7 +2220,7 @@ int scamper_file_warts_init_write(scamper_file_t *sf)
  */
 int scamper_file_warts_init_append(scamper_file_t *sf)
 {
-  warts_state_t   *state;
+  warts_state_t   *s;
   warts_hdr_t      hdr;
   int              i, fd;
   uint32_t         j;
@@ -2268,43 +2289,30 @@ int scamper_file_warts_init_append(scamper_file_t *sf)
     }
 
   /* get the state structure created in init_read */
-  state = scamper_file_getstate(sf);
+  s = scamper_file_getstate(sf);
 
   /*
    * all the lists are in a table.  put them into a splay tree so we can
    * find them quickly, and then trash the list table
    */
-  if((state->list_tree = splaytree_alloc(warts_list_cmp)) == NULL)
-    {
+  if((s->list_tree = splaytree_alloc((splaytree_cmp_t)warts_list_cmp)) == NULL)
+    return -1;
+  for(j=1; j<s->list_count; j++)
+    if(splaytree_insert(s->list_tree, s->list_table[j]) == NULL)
       return -1;
-    }
-  for(j=1; j<state->list_count; j++)
-    {
-      if(splaytree_insert(state->list_tree, state->list_table[j]) == NULL)
-	{
-	  return -1;
-	}
-    }
-  free(state->list_table); state->list_table = NULL;
+  free(s->list_table); s->list_table = NULL;
 
-  if((state->cycle_tree = splaytree_alloc(warts_cycle_cmp)) == NULL)
-    {
-      return -1;
-    }
-  for(j=1; j<state->cycle_count; j++)
+  if((s->cycle_tree=splaytree_alloc((splaytree_cmp_t)warts_cycle_cmp)) == NULL)
+    return -1;
+  for(j=1; j<s->cycle_count; j++)
     {
       /* don't install finished cycles into the splaytree */
-      if(state->cycle_table[j] == NULL)
-	{
-	  continue;
-	}
-
-      if(splaytree_insert(state->cycle_tree, state->cycle_table[j]) == NULL)
-	{
-	  return -1;
-	}
+      if(s->cycle_table[j] == NULL)
+	continue;
+      if(splaytree_insert(s->cycle_tree, s->cycle_table[j]) == NULL)
+	return -1;
     }
-  free(state->cycle_table); state->cycle_table = NULL;
+  free(s->cycle_table); s->cycle_table = NULL;
 
   return 0;
 }

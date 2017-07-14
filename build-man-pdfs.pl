@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-# $Id: build-man-pdfs.pl,v 1.1.6.3 2015/12/07 07:23:51 mjl Exp $
+# $Id: build-man-pdfs.pl,v 1.8.2.1 2017/06/22 08:25:27 mjl Exp $
 
 use strict;
 use warnings;
@@ -16,8 +16,11 @@ my @mans = ("scamper/scamper.1",
 	    "utils/sc_ally/sc_ally.1",
 	    "utils/sc_analysis_dump/sc_analysis_dump.1",
 	    "utils/sc_attach/sc_attach.1",
-	    "utils/sc_ipiddump/sc_ipiddump.1",
+	    "utils/sc_bdrmap/sc_bdrmap.1",
 	    "utils/sc_filterpolicy/sc_filterpolicy.1",
+	    "utils/sc_prefixscan/sc_prefixscan.1",
+	    "utils/sc_remoted/sc_remoted.1",
+	    "utils/sc_radargun/sc_radargun.1",
 	    "utils/sc_speedtrap/sc_speedtrap.1",
 	    "utils/sc_tbitblind/sc_tbitblind.1",
 	    "utils/sc_tracediff/sc_tracediff.1",
@@ -30,9 +33,13 @@ my @mans = ("scamper/scamper.1",
 	    "scamper/warts.5",
     );
 
-cmd("mkdir man");
+cmd("mkdir -p man");
 foreach my $man (@mans)
 {
-    cmd("groff -T ps -man $man | ps2pdf - >man/$1.pdf")
-	if($man =~ /^.+\/(.+)$/)
+    if($man =~ /^.+\/(.+)$/)
+    {
+	my $name = $1;
+	cmd("groff -T ps -man $man | ps2pdf - >man/$name.pdf");
+	cmd("touch -r $man man/$name.pdf");
+    }
 }

@@ -92,7 +92,7 @@ bin_PROGRAMS = sc_speedtrap$(EXEEXT)
 subdir = utils/sc_speedtrap
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_openssl.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/ax_gcc_builtin.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -105,7 +105,9 @@ PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_sc_speedtrap_OBJECTS = sc_speedtrap.$(OBJEXT) ../../utils.$(OBJEXT) \
 	../../mjl_heap.$(OBJEXT) ../../mjl_list.$(OBJEXT) \
-	../../mjl_splaytree.$(OBJEXT)
+	../../mjl_splaytree.$(OBJEXT) \
+	../../scamper/scamper_linepoll.$(OBJEXT) \
+	../../scamper/scamper_writebuf.$(OBJEXT)
 sc_speedtrap_OBJECTS = $(am_sc_speedtrap_OBJECTS)
 sc_speedtrap_DEPENDENCIES = ../../scamper/libscamperfile.la
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -334,7 +336,9 @@ sc_speedtrap_SOURCES = \
 	../../utils.c \
 	../../mjl_heap.c \
 	../../mjl_list.c \
-	../../mjl_splaytree.c
+	../../mjl_splaytree.c \
+	../../scamper/scamper_linepoll.c \
+	../../scamper/scamper_writebuf.c
 
 sc_speedtrap_LDADD = ../../scamper/libscamperfile.la
 man_MANS = sc_speedtrap.1
@@ -435,6 +439,18 @@ clean-binPROGRAMS:
 	../../$(DEPDIR)/$(am__dirstamp)
 ../../mjl_splaytree.$(OBJEXT): ../../$(am__dirstamp) \
 	../../$(DEPDIR)/$(am__dirstamp)
+../../scamper/$(am__dirstamp):
+	@$(MKDIR_P) ../../scamper
+	@: > ../../scamper/$(am__dirstamp)
+../../scamper/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../../scamper/$(DEPDIR)
+	@: > ../../scamper/$(DEPDIR)/$(am__dirstamp)
+../../scamper/scamper_linepoll.$(OBJEXT):  \
+	../../scamper/$(am__dirstamp) \
+	../../scamper/$(DEPDIR)/$(am__dirstamp)
+../../scamper/scamper_writebuf.$(OBJEXT):  \
+	../../scamper/$(am__dirstamp) \
+	../../scamper/$(DEPDIR)/$(am__dirstamp)
 
 sc_speedtrap$(EXEEXT): $(sc_speedtrap_OBJECTS) $(sc_speedtrap_DEPENDENCIES) $(EXTRA_sc_speedtrap_DEPENDENCIES) 
 	@rm -f sc_speedtrap$(EXEEXT)
@@ -443,6 +459,7 @@ sc_speedtrap$(EXEEXT): $(sc_speedtrap_OBJECTS) $(sc_speedtrap_DEPENDENCIES) $(EX
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f ../../*.$(OBJEXT)
+	-rm -f ../../scamper/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
@@ -451,6 +468,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../../$(DEPDIR)/mjl_list.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../../$(DEPDIR)/mjl_splaytree.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../../$(DEPDIR)/utils.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../scamper/$(DEPDIR)/scamper_linepoll.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../scamper/$(DEPDIR)/scamper_writebuf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sc_speedtrap.Po@am__quote@
 
 .c.o:
@@ -644,6 +663,8 @@ distclean-generic:
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
 	-rm -f ../../$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../../$(am__dirstamp)
+	-rm -f ../../scamper/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../../scamper/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -653,7 +674,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ../../$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ../../$(DEPDIR) ../../scamper/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -699,7 +720,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ../../$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ../../$(DEPDIR) ../../scamper/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

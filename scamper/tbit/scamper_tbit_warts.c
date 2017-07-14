@@ -4,9 +4,10 @@
  * Copyright (C) 2009-2010 Ben Stasiewicz
  * Copyright (C) 2010-2011 The University of Waikato
  * Copyright (C) 2012-2015 The Regents of the University of California
+ * Copyright (C) 2016      Matthew Luckie
  * Authors: Matthew Luckie, Ben Stasiewicz
  *
- * $Id: scamper_tbit_warts.c,v 1.11.6.1 2015/10/17 09:03:06 mjl Exp $
+ * $Id: scamper_tbit_warts.c,v 1.25.2.2 2017/06/22 08:39:56 mjl Exp $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +26,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: scamper_tbit_warts.c,v 1.11.6.1 2015/10/17 09:03:06 mjl Exp $";
+  "$Id: scamper_tbit_warts.c,v 1.25.2.2 2017/06/22 08:39:56 mjl Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -755,7 +756,7 @@ int extract_cookie(const uint8_t *buf, uint32_t *off,
 		   const uint32_t len, uint8_t *out, void *param)
 {
   uint8_t cookielen;
-  if(len - *off < 1)
+  if(*off >= len || len - *off < 1)
     return -1;
   out[0] = cookielen = buf[(*off)++];
   if(cookielen > 16 || cookielen > len - *off)
@@ -859,6 +860,9 @@ static int warts_tbit_params_read(scamper_tbit_t *tbit,
   if(warts_params_read(buf, off, len, handlers, handler_cnt) != 0)
     return -1;
 
+  if(tbit->src == NULL || tbit->dst == NULL)
+    return -1;
+
   /* handle the fact the pktc param changed from 16 to 32 bits */
   if(pktc32 != 0)
     tbit->pktc = pktc32;
@@ -925,15 +929,13 @@ int scamper_file_warts_tbit_read(scamper_file_t *sf, const warts_hdr_t *hdr,
 				 scamper_tbit_t **tbit_out)
 {
   scamper_tbit_t *tbit = NULL;
-  warts_addrtable_t table;
+  warts_addrtable_t *table = NULL;
   warts_state_t *state = scamper_file_getstate(sf);
   uint8_t *buf = NULL;
   uint16_t junk16;
   uint32_t junk32;
   uint32_t off = 0;
   uint32_t i;
-
-  memset(&table, 0, sizeof(table));
 
   /* Read in the header */
   if(warts_read(sf, &buf, hdr->len) != 0)
@@ -953,8 +955,11 @@ int scamper_file_warts_tbit_read(scamper_file_t *sf, const warts_hdr_t *hdr,
       goto err;
     }
 
+  if((table = warts_addrtable_alloc_byid()) == NULL)
+    goto err;
+
   /* Read in the tbit data from the warts file */
-  if(warts_tbit_params_read(tbit, &table, state, buf, &off, hdr->len) != 0)
+  if(warts_tbit_params_read(tbit, table, state, buf, &off, hdr->len) != 0)
     {
       goto err;
     }
@@ -981,7 +986,7 @@ int scamper_file_warts_tbit_read(scamper_file_t *sf, const warts_hdr_t *hdr,
     case SCAMPER_TBIT_TYPE_BLIND_DATA:
       if((tbit->data = scamper_tbit_blind_alloc()) == NULL)
 	goto err;
-      break;
+      break;      
     }
 
   /* Determine how many tbit_pkts to read */
@@ -1015,7 +1020,7 @@ int scamper_file_warts_tbit_read(scamper_file_t *sf, const warts_hdr_t *hdr,
 	  switch(tbit->type)
 	    {
 	    case SCAMPER_TBIT_TYPE_PMTUD:
-	      if(warts_tbit_pmtud_read(tbit, &table, buf, &i, hdr->len) != 0)
+	      if(warts_tbit_pmtud_read(tbit, table, buf, &i, hdr->len) != 0)
 		goto err;
 	      break;
 
@@ -1054,14 +1059,13 @@ int scamper_file_warts_tbit_read(scamper_file_t *sf, const warts_hdr_t *hdr,
       off += junk32;
     }
 
-  assert(off == hdr->len);
-  warts_addrtable_clean(&table);
+  warts_addrtable_free(table);
   *tbit_out = tbit;
   free(buf);
   return 0;
 
  err:
-  warts_addrtable_clean(&table);
+  if(table != NULL) warts_addrtable_free(table);
   if(buf != NULL) free(buf);
   if(tbit != NULL) scamper_tbit_free(tbit);
   return -1;
@@ -1071,7 +1075,7 @@ int scamper_file_warts_tbit_read(scamper_file_t *sf, const warts_hdr_t *hdr,
 int scamper_file_warts_tbit_write(const scamper_file_t *sf,
 				  const scamper_tbit_t *tbit)
 {
-  warts_addrtable_t table;
+  warts_addrtable_t *table = NULL;
   warts_tbit_pkt_t *pkts = NULL;
   warts_tbit_pmtud_t pmtud;
   warts_tbit_null_t null;
@@ -1086,10 +1090,11 @@ int scamper_file_warts_tbit_write(const scamper_file_t *sf,
   uint32_t len, i, off = 0;
   size_t size;
 
-  memset(&table, 0, sizeof(table));
+  if((table = warts_addrtable_alloc_byaddr()) == NULL)
+    goto err;
 
   /* Set the tbit data (not including the packets) */
-  warts_tbit_params(tbit, &table, flags, &flags_len, &params_len);
+  warts_tbit_params(tbit, table, flags, &flags_len, &params_len);
   len = 8 + flags_len + params_len + 2;
 
   if(tbit->pktc > 0)
@@ -1108,7 +1113,7 @@ int scamper_file_warts_tbit_write(const scamper_file_t *sf,
       switch(tbit->type)
 	{
 	case SCAMPER_TBIT_TYPE_PMTUD:
-	  warts_tbit_pmtud_params(tbit, &table, &pmtud);
+	  warts_tbit_pmtud_params(tbit, table, &pmtud);
 	  len += (2 + 4 + pmtud.len);
 	  break;
 
@@ -1158,7 +1163,7 @@ int scamper_file_warts_tbit_write(const scamper_file_t *sf,
   insert_wartshdr(buf, &off, len, SCAMPER_FILE_OBJ_TBIT);
 
   /* Write the tbit data (excluding packets) to the buffer */
-  if(warts_tbit_params_write(tbit, sf, &table, buf, &off, len,
+  if(warts_tbit_params_write(tbit, sf, table, buf, &off, len,
 			     flags, flags_len, params_len) != 0)
     {
       goto err;
@@ -1180,7 +1185,7 @@ int scamper_file_warts_tbit_write(const scamper_file_t *sf,
 	{
 	case SCAMPER_TBIT_TYPE_PMTUD:
 	  insert_uint32(buf, &off, len, &pmtud.len, NULL);
-	  warts_tbit_pmtud_write(tbit, buf, &off, len, &table, &pmtud);
+	  warts_tbit_pmtud_write(tbit, buf, &off, len, table, &pmtud);
 	  break;
 
 	case SCAMPER_TBIT_TYPE_NULL:
@@ -1232,12 +1237,12 @@ int scamper_file_warts_tbit_write(const scamper_file_t *sf,
   if(warts_write(sf, buf, len) == -1)
     goto err;
 
-  warts_addrtable_clean(&table);
+  warts_addrtable_free(table);
   free(buf);
   return 0;
 
 err:
-  warts_addrtable_clean(&table);
+  if(table != NULL) warts_addrtable_free(table);
   if(pkts != NULL) free(pkts);
   if(buf != NULL) free(buf);
   return -1;

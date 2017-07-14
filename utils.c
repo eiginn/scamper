@@ -1,12 +1,13 @@
 /*
  * utils.c
  *
- * $Id: utils.c,v 1.173.2.3 2016/01/08 07:54:37 mjl Exp $
+ * $Id: utils.c,v 1.184 2016/09/17 05:30:49 mjl Exp $
  *
  * Copyright (C) 2003-2006 Matthew Luckie
  * Copyright (C) 2006-2011 The University of Waikato
  * Copyright (C) 2011      Matthew Luckie
  * Copyright (C) 2012-2015 The Regents of the University of California
+ * Copyright (C) 2015-2016 Matthew Luckie
  * Author: Matthew Luckie
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,7 +27,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: utils.c,v 1.173.2.3 2016/01/08 07:54:37 mjl Exp $";
+  "$Id: utils.c,v 1.184 2016/09/17 05:30:49 mjl Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -35,7 +36,7 @@ static const char rcsid[] =
 #include "internal.h"
 #include "utils.h"
 
-#if defined(HAVE_SOCKADDR_SA_LEN)
+#if defined(HAVE_STRUCT_SOCKADDR_SA_LEN)
 int sockaddr_len(const struct sockaddr *sa)
 {
   return sa->sa_len;
@@ -127,7 +128,7 @@ int sockaddr_compose(struct sockaddr *sa,
     }
   else return -1;
 
-#if defined(HAVE_SOCKADDR_SA_LEN)
+#if defined(HAVE_STRUCT_SOCKADDR_SA_LEN)
   sa->sa_len    = len;
 #endif
 
@@ -147,7 +148,7 @@ int sockaddr_compose_un(struct sockaddr *sa, const char *file)
   sn->sun_family = AF_UNIX;
   snprintf(sn->sun_path, sizeof(sn->sun_path), "%s", file);
 
-#if defined (HAVE_SOCKADDR_SA_LEN)
+#if defined(HAVE_STRUCT_SOCKADDR_SA_LEN)
   sn->sun_len    = sizeof(struct sockaddr_un);
 #endif
 
@@ -320,10 +321,19 @@ int addr4_cmp(const void *va, const void *vb)
 {
   const struct in_addr *a = (const struct in_addr *)va;
   const struct in_addr *b = (const struct in_addr *)vb;
-
   if(a->s_addr < b->s_addr) return -1;
   if(a->s_addr > b->s_addr) return  1;
+  return 0;
+}
 
+int addr4_human_cmp(const void *va, const void *vb)
+{
+  const struct in_addr *a = (const struct in_addr *)va;
+  const struct in_addr *b = (const struct in_addr *)vb;
+  uint32_t ua = ntohl(a->s_addr);
+  uint32_t ub = ntohl(b->s_addr);
+  if(ua < ub) return -1;
+  if(ua > ub) return  1;
   return 0;
 }
 
@@ -344,6 +354,35 @@ int addr6_cmp(const void *va, const void *vb)
     {
       if(a->u.Word[i] < b->u.Word[i]) return -1;
       if(a->u.Word[i] > b->u.Word[i]) return  1;
+    }
+#endif
+
+  return 0;
+}
+
+int addr6_human_cmp(const void *va, const void *vb)
+{
+  const struct in6_addr *a = (const struct in6_addr *)va;
+  const struct in6_addr *b = (const struct in6_addr *)vb;
+  int i;
+
+#ifndef _WIN32
+  uint32_t ua, ub;
+  for(i=0; i<4; i++)
+    {
+      ua = ntohl(a->s6_addr32[i]);
+      ub = ntohl(b->s6_addr32[i]);
+      if(ua < ub) return -1;
+      if(ua > ub) return  1;
+    }
+#else
+  uint16_t ua, ub;
+  for(i=0; i<8; i++)
+    {
+      ua = ntohs(a->u.Word[i]);
+      ub = ntohs(b->u.Word[i]);
+      if(ua < ub) return -1;
+      if(ua > ub) return  1;
     }
 #endif
 
@@ -1230,6 +1269,58 @@ char *string_concat(char *str, size_t len, size_t *off, const char *fs, ...)
   return str;
 }
 
+/*
+ * string_addrport
+ *
+ * given an input string, return the ip address / name in the first part
+ * (if present) and the port number in the second.  do some basic sanity
+ * checking as well.
+ */
+int string_addrport(const char *in, char **first, int *port)
+{
+  char *ptr, *dup = NULL, *first_tmp = NULL;
+  long lo;
+
+  if(string_isnumber(in))
+    {
+      if(string_tolong(in, &lo) == -1 || lo < 1 || lo > 65535)
+	goto err;
+      *first = NULL;
+      *port  = lo;
+      return 0;
+    }
+
+  if((dup = strdup(in)) == NULL)
+    goto err;
+
+  if(dup[0] == '[')
+    {
+      string_nullterm_char(dup, ']', &ptr);
+      if(ptr == NULL || *ptr != ':' || (first_tmp = strdup(dup+1)) == NULL)
+	goto err;
+      ptr++;
+    }
+  else
+    {
+      string_nullterm_char(dup, ':', &ptr);
+      if(ptr == NULL || (first_tmp = strdup(dup)) == NULL)
+	goto err;
+    }
+
+  if(string_tolong(ptr, &lo) != 0 || lo < 1 || lo > 65535)
+    goto err;
+
+  *first = first_tmp;
+  *port  = lo;
+  free(dup);
+  return 0;
+
+ err:
+  if(first_tmp != NULL) free(first_tmp);
+  if(dup != NULL) free(dup);
+  return -1;
+}
+
 void mem_concat(void *dst,const void *src,size_t len,size_t *off,size_t size)
 {
   assert(*off + len <= size);
@@ -2038,7 +2129,7 @@ uint32_t byteswap32(const uint32_t word)
 int file_lines(const char *filename, int (*func)(char *, void *), void *param)
 {
   struct stat sb;
-  size_t off, start;
+  off_t off, start;
   char *readbuf = NULL;
   int fd = -1;
 

@@ -1,7 +1,7 @@
 /*
  * scamper_do_tracelb.c
  *
- * $Id: scamper_tracelb_do.c,v 1.271.6.1 2016/01/08 08:00:08 mjl Exp $
+ * $Id: scamper_tracelb_do.c,v 1.274 2016/08/08 08:37:59 mjl Exp $
  *
  * Copyright (C) 2008-2011 The University of Waikato
  * Copyright (C) 2012      The Regents of the University of California
@@ -29,7 +29,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: scamper_tracelb_do.c,v 1.271.6.1 2016/01/08 08:00:08 mjl Exp $";
+  "$Id: scamper_tracelb_do.c,v 1.274 2016/08/08 08:37:59 mjl Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -904,20 +904,6 @@ static int tracelb_flowids_list_add(slist_t *list, tracelb_probe_t *pr)
   return 0;
 }
 
-static void tracelb_flowids_list_free(slist_t *list)
-{
-  tracelb_flowid_t *tf;
-
-  if(list == NULL)
-    return;
-
-  while((tf = slist_head_pop(list)) != NULL)
-    free(tf);
-
-  slist_free(list);
-  return;
-}
-
 /*
  * tracelb_link_flowid_get
  *
@@ -1013,6 +999,7 @@ static int tracelb_newnode_add(tracelb_branch_t *br,
 
   if((newnode = malloc_zero(sizeof(tracelb_newnode_t))) == NULL)
     {
+      printerror(errno, strerror, __func__, "could not alloc newnode");
       goto err;
     }
   newnode->probe = probe;
@@ -1020,6 +1007,7 @@ static int tracelb_newnode_add(tracelb_branch_t *br,
   reply = probe->rxs[0];
   if((newnode->node = scamper_tracelb_node_alloc(reply->reply_from)) == NULL)
     {
+      printerror(errno, strerror, __func__, "could not alloc node");
       goto err;
     }
   if(SCAMPER_TRACELB_REPLY_IS_ICMP_TTL_EXP(reply) ||
@@ -1039,6 +1027,12 @@ static int tracelb_newnode_add(tracelb_branch_t *br,
   return 0;
 
  err:
+  if(newnode != NULL)
+    {
+      if(newnode->node != NULL)
+	scamper_tracelb_node_free(newnode->node);
+      free(newnode);
+    }
   return -1;
 }
 
@@ -2196,7 +2190,7 @@ static int tracelb_process_clump(scamper_task_t *task, tracelb_branch_t *br)
     }
   else
     {
-      tracelb_flowids_list_free(flowids);
+      if(flowids != NULL) slist_free_cb(flowids, free);
       tracelb_branch_free(state, br);
     }
 

@@ -3,9 +3,10 @@
  *
  * Copyright (C) 2011 The University of Waikato
  * Copyright (C) 2014 The Regents of the University of California
+ * Copyright (C) 2016 Matthew Luckie
  * Author: Matthew Luckie
  *
- * $Id: scamper_sniff_warts.c,v 1.6 2014/06/12 19:59:48 mjl Exp $
+ * $Id: scamper_sniff_warts.c,v 1.8.2.1 2017/06/22 08:35:52 mjl Exp $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +25,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: scamper_sniff_warts.c,v 1.6 2014/06/12 19:59:48 mjl Exp $";
+  "$Id: scamper_sniff_warts.c,v 1.8.2.1 2017/06/22 08:35:52 mjl Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -142,6 +143,7 @@ static scamper_sniff_pkt_t *warts_sniff_pkt_read(warts_state_t *state,
   const int handler_cnt = sizeof(handlers)/sizeof(warts_param_reader_t);
 
   if(warts_params_read(buf, off, len, handlers, handler_cnt) != 0 ||
+     plen == 0 || data == NULL ||
      (pkt = scamper_sniff_pkt_alloc(data, plen, &tv)) == NULL)
     goto err;
 
@@ -231,8 +233,12 @@ static int warts_sniff_params_read(scamper_sniff_t *sniff,
     {&sniff->icmpid,       (wpr_t)extract_uint16,       NULL},
   };
   const int handler_cnt = sizeof(handlers)/sizeof(warts_param_reader_t);
-
-  return warts_params_read(buf, off, len, handlers, handler_cnt);
+  int rc;
+  if((rc = warts_params_read(buf, off, len, handlers, handler_cnt)) != 0)
+    return rc;
+  if(sniff->src == NULL)
+    return -1;
+  return 0;
 }
 
 static int warts_sniff_params_write(const scamper_sniff_t *sniff,
@@ -274,13 +280,11 @@ int scamper_file_warts_sniff_read(scamper_file_t *sf, const warts_hdr_t *hdr,
 				 scamper_sniff_t **sniff_out)
 {
   scamper_sniff_t *sniff = NULL;
-  warts_addrtable_t table;
+  warts_addrtable_t *table = NULL;
   warts_state_t *state = scamper_file_getstate(sf);
   uint8_t *buf = NULL;
   uint32_t off = 0;
   uint32_t i;
-
-  memset(&table, 0, sizeof(table));
 
   /* Read in the header */
   if(warts_read(sf, &buf, hdr->len) != 0)
@@ -300,8 +304,11 @@ int scamper_file_warts_sniff_read(scamper_file_t *sf, const warts_hdr_t *hdr,
       goto err;
     }
 
+  if((table = warts_addrtable_alloc_byid()) == NULL)
+    goto err;
+
   /* Read in the sniff data from the warts file */
-  if(warts_sniff_params_read(sniff, &table, state, buf, &off, hdr->len) != 0)
+  if(warts_sniff_params_read(sniff, table, state, buf, &off, hdr->len) != 0)
     {
       goto err;
     }
@@ -329,14 +336,13 @@ int scamper_file_warts_sniff_read(scamper_file_t *sf, const warts_hdr_t *hdr,
         }
     }
 
-  assert(off == hdr->len);
-  warts_addrtable_clean(&table);
+  warts_addrtable_free(table);
   *sniff_out = sniff;
   free(buf);
   return 0;
 
  err:
-  warts_addrtable_clean(&table);
+  if(table != NULL) warts_addrtable_free(table);
   if(buf != NULL) free(buf);
   if(sniff != NULL) scamper_sniff_free(sniff);
   return -1;
@@ -346,7 +352,7 @@ int scamper_file_warts_sniff_read(scamper_file_t *sf, const warts_hdr_t *hdr,
 int scamper_file_warts_sniff_write(const scamper_file_t *sf,
 				   const scamper_sniff_t *sniff)
 {
-  warts_addrtable_t table;
+  warts_addrtable_t *table = NULL;
   warts_sniff_pkt_t *pkts = NULL;
   uint8_t *buf = NULL;
   uint8_t  flags[sniff_vars_mfb];
@@ -354,10 +360,11 @@ int scamper_file_warts_sniff_write(const scamper_file_t *sf,
   uint32_t len, i, off = 0;
   size_t size;
 
-  memset(&table, 0, sizeof(table));
+  if((table = warts_addrtable_alloc_byaddr()) == NULL)
+    goto err;
 
   /* Set the sniff data (not including the packets) */
-  warts_sniff_params(sniff, &table, flags, &flags_len, &params_len);
+  warts_sniff_params(sniff, table, flags, &flags_len, &params_len);
   len = 8 + flags_len + params_len + 2;
 
   if(sniff->pktc > 0)
@@ -377,7 +384,7 @@ int scamper_file_warts_sniff_write(const scamper_file_t *sf,
   insert_wartshdr(buf, &off, len, SCAMPER_FILE_OBJ_SNIFF);
 
   /* Write the sniff data (excluding packets) to the buffer */
-  if(warts_sniff_params_write(sniff, sf, &table, buf, &off, len,
+  if(warts_sniff_params_write(sniff, sf, table, buf, &off, len,
 			      flags, flags_len, params_len) != 0)
     {
       goto err;
@@ -396,12 +403,12 @@ int scamper_file_warts_sniff_write(const scamper_file_t *sf,
   if(warts_write(sf, buf, len) == -1)
     goto err;
 
-  warts_addrtable_clean(&table);
+  warts_addrtable_free(table);
   free(buf);
   return 0;
 
 err:
-  warts_addrtable_clean(&table);
+  if(table != NULL) warts_addrtable_free(table);
   if(pkts != NULL) free(pkts);
   if(buf != NULL) free(buf);
   return -1;

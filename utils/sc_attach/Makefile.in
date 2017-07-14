@@ -92,7 +92,7 @@ bin_PROGRAMS = sc_attach$(EXEEXT)
 subdir = utils/sc_attach
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_openssl.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/ax_gcc_builtin.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -104,7 +104,9 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_sc_attach_OBJECTS = sc_attach.$(OBJEXT) ../../utils.$(OBJEXT) \
-	../../mjl_list.$(OBJEXT)
+	../../mjl_list.$(OBJEXT) \
+	../../scamper/scamper_writebuf.$(OBJEXT) \
+	../../scamper/scamper_linepoll.$(OBJEXT)
 sc_attach_OBJECTS = $(am_sc_attach_OBJECTS)
 sc_attach_LDADD = $(LDADD)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -331,7 +333,9 @@ AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/scamper
 sc_attach_SOURCES = \
 	sc_attach.c \
 	../../utils.c \
-	../../mjl_list.c
+	../../mjl_list.c \
+	../../scamper/scamper_writebuf.c \
+	../../scamper/scamper_linepoll.c
 
 man_MANS = sc_attach.1
 CLEANFILES = *~ *.core
@@ -427,6 +431,18 @@ clean-binPROGRAMS:
 	../../$(DEPDIR)/$(am__dirstamp)
 ../../mjl_list.$(OBJEXT): ../../$(am__dirstamp) \
 	../../$(DEPDIR)/$(am__dirstamp)
+../../scamper/$(am__dirstamp):
+	@$(MKDIR_P) ../../scamper
+	@: > ../../scamper/$(am__dirstamp)
+../../scamper/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../../scamper/$(DEPDIR)
+	@: > ../../scamper/$(DEPDIR)/$(am__dirstamp)
+../../scamper/scamper_writebuf.$(OBJEXT):  \
+	../../scamper/$(am__dirstamp) \
+	../../scamper/$(DEPDIR)/$(am__dirstamp)
+../../scamper/scamper_linepoll.$(OBJEXT):  \
+	../../scamper/$(am__dirstamp) \
+	../../scamper/$(DEPDIR)/$(am__dirstamp)
 
 sc_attach$(EXEEXT): $(sc_attach_OBJECTS) $(sc_attach_DEPENDENCIES) $(EXTRA_sc_attach_DEPENDENCIES) 
 	@rm -f sc_attach$(EXEEXT)
@@ -435,12 +451,15 @@ sc_attach$(EXEEXT): $(sc_attach_OBJECTS) $(sc_attach_DEPENDENCIES) $(EXTRA_sc_at
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f ../../*.$(OBJEXT)
+	-rm -f ../../scamper/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@../../$(DEPDIR)/mjl_list.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../../$(DEPDIR)/utils.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../scamper/$(DEPDIR)/scamper_linepoll.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../scamper/$(DEPDIR)/scamper_writebuf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sc_attach.Po@am__quote@
 
 .c.o:
@@ -634,6 +653,8 @@ distclean-generic:
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
 	-rm -f ../../$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../../$(am__dirstamp)
+	-rm -f ../../scamper/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../../scamper/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -643,7 +664,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ../../$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ../../$(DEPDIR) ../../scamper/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -689,7 +710,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ../../$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ../../$(DEPDIR) ../../scamper/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

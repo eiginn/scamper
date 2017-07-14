@@ -4,9 +4,10 @@
  * Copyright (C) 2005-2006 Matthew Luckie
  * Copyright (C) 2006-2011 The University of Waikato
  * Copyright (C) 2012-2014 The Regents of the University of California
+ * Copyright (C) 2016      Matthew Luckie
  * Author: Matthew Luckie
  *
- * $Id: scamper_ping_warts.c,v 1.13 2014/06/12 19:59:48 mjl Exp $
+ * $Id: scamper_ping_warts.c,v 1.15.2.1 2017/06/22 08:31:58 mjl Exp $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +26,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: scamper_ping_warts.c,v 1.13 2014/06/12 19:59:48 mjl Exp $";
+  "$Id: scamper_ping_warts.c,v 1.15.2.1 2017/06/22 08:31:58 mjl Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -180,7 +181,7 @@ static int extract_ping_reply_v4rr(const uint8_t *buf, uint32_t *off,
   scamper_addr_t *addr;
   uint8_t i, rrc;
 
-  if(len - *off < 1)
+  if(*off >= len || len - *off < 1)
     return -1;
 
   rrc = buf[(*off)++];
@@ -229,13 +230,22 @@ static int extract_ping_reply_v4ts(const uint8_t *buf, uint32_t *off,
   uint8_t i, tsc, ipc;
   uint32_t u32;
 
-  if(len - *off < 2)
+  if(*off >= len || len - *off < 2)
     return -1;
 
+  /*
+   * the v4ts structure will have timestamps, and sometimes IP
+   * addresses.  if there are IP addresses, the number must match the
+   * number of timestamp records.  the second parameter to
+   * scamper_ping_reply_v4ts_alloc is a binary flag that says whether
+   * or not to allocate the same number of IP addresses.  this is
+   * probably a design oversight in the warts records.
+   */
   tsc = buf[(*off)++];
   ipc = buf[(*off)++];
-
-  if((*out = scamper_ping_reply_v4ts_alloc(tsc, ipc)) == NULL)
+  if(ipc != 0 && ipc != tsc)
+    return -1;
+  if((*out = scamper_ping_reply_v4ts_alloc(tsc, ipc != 0 ? 1 : 0)) == NULL)
     return -1;
 
   for(i=0; i<tsc; i++)
@@ -272,7 +282,7 @@ static int extract_ping_reply_tsreply(uint8_t *buf, uint32_t *off,
 				      void *param)
 {
   scamper_ping_reply_tsreply_t *tsreply;
-  if(len - *off < 12)
+  if(*off >= len || len - *off < 12)
     return -1;
   if((tsreply = scamper_ping_reply_tsreply_alloc()) == NULL)
     return -1;
@@ -383,7 +393,7 @@ static int extract_ping_reply_icmptc(const uint8_t *buf, uint32_t *off,
 				     uint32_t len, scamper_ping_reply_t *reply,
 				     void *param)
 {
-  if(len - *off < 2)
+  if(*off >= len || len - *off < 2)
     return -1;
 
   reply->icmp_type = buf[(*off)++];
@@ -435,6 +445,9 @@ static int warts_ping_reply_read(const scamper_ping_t *ping,
 
   if((i = warts_params_read(buf, off, len, handlers, handler_cnt)) != 0)
     return i;
+
+  if(reply->addr == NULL)
+    return -1;
 
   /*
    * some earlier versions of the ping reply structure did not include
@@ -591,7 +604,7 @@ static int extract_ping_probe_tsps(const uint8_t *buf, uint32_t *off,
   uint8_t i, ipc;
 
   /* make sure there is room for the ip count */
-  if(len - *off < 1)
+  if(*off >= len || len - *off < 1)
     return -1;
 
   ipc = buf[(*off)++];
@@ -649,6 +662,8 @@ static int warts_ping_params_read(scamper_ping_t *ping, warts_state_t *state,
 
   if((rc = warts_params_read(buf, off, len, handlers, handler_cnt)) != 0)
     return rc;
+  if(ping->src == NULL || ping->dst == NULL)
+    return -1;
   if(flag_isset(&buf[o], WARTS_PING_PROBE_TIMEOUT) == 0)
     ping->probe_timeout = ping->probe_wait;
   return 0;
@@ -716,9 +731,7 @@ int scamper_file_warts_ping_read(scamper_file_t *sf, const warts_hdr_t *hdr,
   uint16_t i;
   scamper_ping_reply_t *reply;
   uint16_t reply_count;
-  warts_addrtable_t table;
-
-  memset(&table, 0, sizeof(table));
+  warts_addrtable_t *table = NULL;
 
   if(warts_read(sf, &buf, hdr->len) != 0)
     {
@@ -735,7 +748,10 @@ int scamper_file_warts_ping_read(scamper_file_t *sf, const warts_hdr_t *hdr,
       goto err;
     }
 
-  if(warts_ping_params_read(ping, state, &table, buf, &off, hdr->len) != 0)
+  if((table = warts_addrtable_alloc_byid()) == NULL)
+    goto err;
+
+  if(warts_ping_params_read(ping, state, table, buf, &off, hdr->len) != 0)
     {
       goto err;
     }
@@ -766,7 +782,7 @@ int scamper_file_warts_ping_read(scamper_file_t *sf, const warts_hdr_t *hdr,
 	  goto err;
 	}
 
-      if(warts_ping_reply_read(ping,reply,state,&table,buf,&off,hdr->len) != 0)
+      if(warts_ping_reply_read(ping,reply,state,table,buf,&off,hdr->len) != 0)
 	{
 	  goto err;
 	}
@@ -777,16 +793,14 @@ int scamper_file_warts_ping_read(scamper_file_t *sf, const warts_hdr_t *hdr,
 	}
     }
 
-  assert(off == hdr->len);
-
  done:
-  warts_addrtable_clean(&table);
+  warts_addrtable_free(table);
   *ping_out = ping;
   free(buf);
   return 0;
 
  err:
-  warts_addrtable_clean(&table);
+  if(table != NULL) warts_addrtable_free(table);
   if(buf != NULL) free(buf);
   if(ping != NULL) scamper_ping_free(ping);
   return -1;
@@ -795,7 +809,7 @@ int scamper_file_warts_ping_read(scamper_file_t *sf, const warts_hdr_t *hdr,
 int scamper_file_warts_ping_write(const scamper_file_t *sf,
 				  const scamper_ping_t *ping)
 {
-  warts_addrtable_t table;
+  warts_addrtable_t *table = NULL;
   warts_ping_reply_t *reply_state = NULL;
   scamper_ping_reply_t *reply;
   uint8_t *buf = NULL;
@@ -806,10 +820,11 @@ int scamper_file_warts_ping_write(const scamper_file_t *sf,
   size_t   size;
   int      i, j;
 
-  memset(&table, 0, sizeof(table));
+  if((table = warts_addrtable_alloc_byaddr()) == NULL)
+    goto err;
 
   /* figure out which ping data items we'll store in this record */
-  warts_ping_params(ping, &table, flags, &flags_len, &params_len);
+  warts_ping_params(ping, table, flags, &flags_len, &params_len);
 
   /* length of the ping's flags, parameters, and number of reply records */
   len = 8 + flags_len + 2 + params_len + 2;
@@ -827,7 +842,7 @@ int scamper_file_warts_ping_write(const scamper_file_t *sf,
 	  for(reply=ping->ping_replies[i]; reply != NULL; reply = reply->next)
 	    {
 	      if(warts_ping_reply_state(sf, ping, reply, &reply_state[j++],
-					&table, &len) == -1)
+					table, &len) == -1)
 		{
 		  goto err;
 		}
@@ -842,7 +857,7 @@ int scamper_file_warts_ping_write(const scamper_file_t *sf,
 
   insert_wartshdr(buf, &off, len, SCAMPER_FILE_OBJ_PING);
 
-  if(warts_ping_params_write(ping, sf, &table, buf, &off, len,
+  if(warts_ping_params_write(ping, sf, table, buf, &off, len,
 			     flags, flags_len, params_len) == -1)
     {
       goto err;
@@ -854,7 +869,7 @@ int scamper_file_warts_ping_write(const scamper_file_t *sf,
   /* write each ping reply record */
   for(i=0; i<reply_count; i++)
     {
-      warts_ping_reply_write(&reply_state[i], &table, buf, &off, len);
+      warts_ping_reply_write(&reply_state[i], table, buf, &off, len);
     }
   if(reply_state != NULL)
     {
@@ -869,12 +884,12 @@ int scamper_file_warts_ping_write(const scamper_file_t *sf,
       goto err;
     }
 
-  warts_addrtable_clean(&table);
+  warts_addrtable_free(table);
   free(buf);
   return 0;
 
  err:
-  warts_addrtable_clean(&table);
+  if(table != NULL) warts_addrtable_free(table);
   if(reply_state != NULL) free(reply_state);
   if(buf != NULL) free(buf);
   return -1;

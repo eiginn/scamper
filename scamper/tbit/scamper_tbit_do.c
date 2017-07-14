@@ -1,7 +1,7 @@
 /*
  * scamper_do_tbit.c
  *
- * $Id: scamper_tbit_do.c,v 1.103.6.2 2015/10/21 08:22:51 mjl Exp $
+ * $Id: scamper_tbit_do.c,v 1.176.4.1 2016/12/04 05:46:57 mjl Exp $
  *
  * Copyright (C) 2009-2010 Ben Stasiewicz
  * Copyright (C) 2009-2010 Stephen Eichler
@@ -37,7 +37,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: scamper_tbit_do.c,v 1.103.6.2 2015/10/21 08:22:51 mjl Exp $";
+  "$Id: scamper_tbit_do.c,v 1.176.4.1 2016/12/04 05:46:57 mjl Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -412,8 +412,11 @@ static void tbit_result(scamper_task_t *task, uint8_t result)
 {
   scamper_tbit_t *tbit = tbit_getdata(task);
   tbit_state_t *state = tbit_getstate(task);
-  char buf[16], addr[64];
   int d = 0;
+
+#ifdef HAVE_SCAMPER_DEBUG
+  char addr[64], buf[16];
+#endif
 
   switch(result)
     {
@@ -447,9 +450,11 @@ static void tbit_result(scamper_task_t *task, uint8_t result)
   if(tbit->result == SCAMPER_TBIT_RESULT_NONE)
     {
       tbit->result = result;
-      scamper_addr_tostr(tbit->dst, addr, sizeof(addr));
-      scamper_debug(__func__, "%s %s", addr,
+#ifdef HAVE_SCAMPER_DEBUG
+      scamper_debug(__func__, "%s %s",
+		    scamper_addr_tostr(tbit->dst, addr, sizeof(addr)),
 		    scamper_tbit_res2str(tbit, buf, sizeof(buf)));
+#endif
     }
 
   if(d == 0)
@@ -788,7 +793,7 @@ static int tbit_reassemble(scamper_task_t *task, scamper_dl_rec_t **out,
 		    (array_cmp_t)tbit_frag_cmp);
   if(frag == NULL)
     {
-      if((frag = malloc_zero(sizeof(tbit_frags_t))) == NULL)
+      if((frag = malloc_zero(sizeof(tbit_frag_t))) == NULL)
 	{
 	  printerror(errno, strerror, __func__, "could not malloc frag");
 	  goto err;
@@ -945,7 +950,7 @@ static void tp_flush(tbit_state_t *state, tbit_probe_t *tp_stop)
   tbit_probe_t *tp;
   for(;;)
     {
-      if((tp = slist_head_get(state->tx)) == NULL || tp == tp_stop)
+      if((tp = slist_head_item(state->tx)) == NULL || tp == tp_stop)
 	break;
       slist_head_pop(state->tx);
       tp_free(tp);
@@ -1265,7 +1270,7 @@ static void dl_syn(scamper_task_t *task, scamper_dl_rec_t *dl)
   scamper_tbit_t *tbit = tbit_getdata(task);
   tbit_state_t *state = tbit_getstate(task);
   scamper_tbit_null_t *null;
-  tbit_segment_t *seg = slist_head_get(state->segments);
+  tbit_segment_t *seg = slist_head_item(state->segments);
   tbit_probe_t *tp = NULL;
   uint32_t ab;
   uint8_t mode = MODE_DATA;
@@ -2192,7 +2197,7 @@ static int dl_data_blinddata(scamper_task_t *task, scamper_dl_rec_t *dl)
       return 0;
     }
 
-  seg = slist_head_get(state->segments);
+  seg = slist_head_item(state->segments);
 
   if(state->blind_step == 0)
     {
@@ -2414,7 +2419,7 @@ static void dl_data(scamper_task_t *task, scamper_dl_rec_t *dl)
   /* remove segment data from the send queue */
   if(dl->dl_tcp_ack > state->snd_nxt)
     {
-      if((seg = slist_head_get(state->segments)) == NULL)
+      if((seg = slist_head_item(state->segments)) == NULL)
 	return;
 
       ab = dl->dl_tcp_ack - state->snd_nxt;
@@ -2457,7 +2462,7 @@ static void timeout_data(scamper_task_t *task)
   tbit_segment_t *seg;
   tbit_probe_t *tp;
 
-  if((seg = slist_head_get(state->segments)) != NULL)
+  if((seg = slist_head_item(state->segments)) != NULL)
     {
       if(state->attempt >= tbit->dat_retx)
 	{
@@ -2671,7 +2676,7 @@ static void dl_zerowin(scamper_task_t *task, scamper_dl_rec_t *dl)
   if(dl->dl_tcp_win == 0)
     return;
 
-  seg = slist_head_get(state->segments); assert(seg != NULL);
+  seg = slist_head_item(state->segments); assert(seg != NULL);
   if((tp = tp_tcp(state)) == NULL)
     goto err;
 
@@ -2859,7 +2864,7 @@ static void timeout_blind(scamper_task_t *task)
       return;
     }
 
-  seg = slist_head_get(state->segments); assert(seg != NULL);
+  seg = slist_head_item(state->segments); assert(seg != NULL);
 
   if(state->blind_step == 0 || state->blind_step == 3)
     {
@@ -3407,7 +3412,7 @@ static int tbit_tx_tcp(scamper_task_t *task, scamper_probe_t *pr,
 	      if(tbit->fo_cookielen > 0)
 		{
 		  pr->pr_tcp_fo_cookie = tbit->fo_cookie;
-		  if((seg = slist_head_get(state->segments)) != NULL)
+		  if((seg = slist_head_item(state->segments)) != NULL)
 		    {
 		      pr->pr_data = seg->data;
 		      pr->pr_len = seg->len;
@@ -3447,7 +3452,7 @@ static int tbit_tx_tcp(scamper_task_t *task, scamper_probe_t *pr,
     {
       if(tp->tp_len > 0)
 	{
-	  if((seg = slist_head_get(state->segments)) == NULL)
+	  if((seg = slist_head_item(state->segments)) == NULL)
 	    return 0;
 
 	  pr->pr_data = seg->data + (tp->tp_seq - state->snd_nxt);
@@ -3855,7 +3860,7 @@ static int tbit_app_http(scamper_tbit_t *tbit, tbit_options_t *o)
 
       if(string_tolong(port, &lo) != 0 || lo < 1 || lo > 65535)
 	return -1;
-      dport = lo;
+      dport = (uint16_t)lo;
       *ptr = '/';
     }
 
@@ -4107,7 +4112,7 @@ void *scamper_do_tbit_alloc(char *str)
 	case TBIT_OPT_FO:
 	  for(i=0; i<tmp; i++)
 	    o.fo_cookie[i] = hex2byte(opt->str[i*2], opt->str[(i*2)+1]);
-	  o.fo_cookielen = tmp;
+	  o.fo_cookielen = (uint8_t)tmp;
 	  break;
 
 	case TBIT_OPT_WSCALE:

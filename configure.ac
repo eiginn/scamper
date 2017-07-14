@@ -1,6 +1,6 @@
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([scamper], [20141211d], [mjl@luckie.org.nz])
+AC_INIT([scamper], [20161204a], [mjl@luckie.org.nz])
 
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([scamper/scamper.c])
@@ -146,6 +146,29 @@ AC_CHECK_HEADERS([netinet/ip_fw.h netinet6/ip6_fw.h], [], [],
 #include <netinet/ip_compat.h>
 ]])
 
+AC_CHECK_HEADERS([netinet/tcp_var.h], [], [],
+[[
+#if HAVE_SYS_TYPES_H
+# include <sys/types.h>
+#endif
+#if HAVE_SYS_SOCKET_H
+# include <sys/socket.h>
+#endif
+#if HAVE_NETINET_IN_H
+# include <netinet/in.h>
+#endif
+#include <sys/queue.h>
+#include <netinet/tcp.h>
+]])
+
+AC_CHECK_HEADERS(net/pfvar.h, [], [],
+[[
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <net/if.h>
+]])
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
 AC_TYPE_UID_T
@@ -176,6 +199,7 @@ AC_CHECK_FUNCS(ftruncate)
 AC_CHECK_FUNCS(getdtablesize)
 AC_CHECK_FUNCS(gethostname)
 AC_CHECK_FUNCS(getifaddrs)
+AC_CHECK_FUNCS(getpagesize)
 AC_CHECK_FUNCS(gettimeofday)
 AC_CHECK_FUNCS(kqueue)
 AC_CHECK_FUNCS(memmove)
@@ -202,6 +226,41 @@ AC_CHECK_MEMBER([struct sockaddr.sa_len],
 	[Define if struct sockaddr has an sa_len member])],[:],
 	[#include <sys/types.h>
 	 #include <sys/socket.h>])
+
+if test "x$ac_cv_header_net_pfvar_h" == xyes; then
+   AC_CHECK_MEMBER([struct pfioc_trans_e.type],
+	[AC_DEFINE([HAVE_STRUCT_PFIOC_TRANS_E_TYPE],[1],
+	[Define if struct pfioc_trans_e has a type member])],[:],
+	[#include <sys/types.h>
+	 #include <sys/socket.h>
+	 #include <netinet/in.h>
+	 #include <net/if.h>
+	 #include <net/pfvar.h>])
+   AC_CHECK_MEMBER([struct pfioc_trans_e.rs_num],
+	[AC_DEFINE([HAVE_STRUCT_PFIOC_TRANS_E_RS_NUM],[1],
+	[Define if struct pfioc_trans_e has a rs_num member])],[:],
+	[#include <sys/types.h>
+	 #include <sys/socket.h>
+	 #include <netinet/in.h>
+	 #include <net/if.h>
+	 #include <net/pfvar.h>])
+   AC_CHECK_MEMBER([struct pf_rule.nat],
+	[AC_DEFINE([HAVE_STRUCT_PF_RULE_NAT],[1],
+	[Define if struct pf_rule has a nat member])],[:],
+	[#include <sys/types.h>
+	 #include <sys/socket.h>
+	 #include <netinet/in.h>
+	 #include <net/if.h>
+	 #include <net/pfvar.h>])
+   AC_CHECK_MEMBER([struct pf_rule.rdr],
+	[AC_DEFINE([HAVE_STRUCT_PF_RULE_RDR],[1],
+	[Define if struct pf_rule has a rdr member])],[:],
+	[#include <sys/types.h>
+	 #include <sys/socket.h>
+	 #include <netinet/in.h>
+	 #include <net/if.h>
+	 #include <net/pfvar.h>]) 
+fi
 
 # Check for structs
 AC_MSG_CHECKING([for struct ip6_ext])
@@ -230,6 +289,8 @@ AX_CHECK_OPENSSL(
 	[AC_DEFINE([HAVE_OPENSSL], [1], [Define to 1 if you have OpenSSL])]
 	[CFLAGS="$CFLAGS $OPENSSL_INCLUDES"])
 
+AX_GCC_BUILTIN(__builtin_clz)
+
 AC_CONFIG_FILES([
 	Makefile
 	scamper/Makefile
@@ -237,11 +298,15 @@ AC_CONFIG_FILES([
 	utils/sc_ally/Makefile
 	utils/sc_analysis_dump/Makefile
 	utils/sc_attach/Makefile
+	utils/sc_bdrmap/Makefile
 	utils/sc_filterpolicy/Makefile
 	utils/sc_ipiddump/Makefile
+	utils/sc_prefixscan/Makefile
+	utils/sc_radargun/Makefile
+	utils/sc_remoted/Makefile
 	utils/sc_speedtrap/Makefile
-	utils/sc_tracediff/Makefile
 	utils/sc_tbitblind/Makefile
+	utils/sc_tracediff/Makefile
 	utils/sc_warts2csv/Makefile
 	utils/sc_warts2json/Makefile
 	utils/sc_warts2pcap/Makefile

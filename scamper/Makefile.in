@@ -14,7 +14,7 @@
 
 @SET_MAKE@
 
-# $Id: Makefile.am,v 1.24.6.1 2015/10/17 05:54:04 mjl Exp $
+# $Id: Makefile.am,v 1.26 2016/08/26 10:08:32 mjl Exp $
 
 
 
@@ -96,7 +96,7 @@ bin_PROGRAMS = scamper$(EXEEXT)
 subdir = scamper
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_openssl.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/ax_gcc_builtin.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(include_HEADERS) \
@@ -138,10 +138,10 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(bindir)" \
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libscamperfile_la_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
-am_libscamperfile_la_OBJECTS = ../mjl_splaytree.lo ../utils.lo \
-	scamper_file.lo scamper_file_arts.lo scamper_file_warts.lo \
-	scamper_file_text.lo scamper_addr.lo scamper_list.lo \
-	scamper_icmpext.lo trace/scamper_trace.lo \
+am_libscamperfile_la_OBJECTS = ../mjl_splaytree.lo ../mjl_patricia.lo \
+	../utils.lo scamper_file.lo scamper_file_arts.lo \
+	scamper_file_warts.lo scamper_file_text.lo scamper_addr.lo \
+	scamper_list.lo scamper_icmpext.lo trace/scamper_trace.lo \
 	trace/scamper_trace_warts.lo trace/scamper_trace_text.lo \
 	trace/scamper_trace_json.lo ping/scamper_ping.lo \
 	ping/scamper_ping_warts.lo ping/scamper_ping_text.lo \
@@ -169,7 +169,8 @@ libscamperfile_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 PROGRAMS = $(bin_PROGRAMS)
 am_scamper_OBJECTS = ../scamper-mjl_list.$(OBJEXT) \
 	../scamper-mjl_heap.$(OBJEXT) \
-	../scamper-mjl_splaytree.$(OBJEXT) ../scamper-utils.$(OBJEXT) \
+	../scamper-mjl_splaytree.$(OBJEXT) \
+	../scamper-mjl_patricia.$(OBJEXT) ../scamper-utils.$(OBJEXT) \
 	scamper-scamper.$(OBJEXT) scamper-scamper_osinfo.$(OBJEXT) \
 	scamper-scamper_addr.$(OBJEXT) scamper-scamper_list.$(OBJEXT) \
 	scamper-scamper_debug.$(OBJEXT) scamper-scamper_udp4.$(OBJEXT) \
@@ -440,6 +441,7 @@ lib_LTLIBRARIES = libscamperfile.la
 libscamperfile_la_LDFLAGS = -version-info 0:0:0
 libscamperfile_la_SOURCES = \
 	../mjl_splaytree.c \
+	../mjl_patricia.c \
 	../utils.c \
 	scamper_file.c \
 	scamper_file_arts.c \
@@ -479,6 +481,7 @@ scamper_SOURCES = \
 	../mjl_list.c \
 	../mjl_heap.c \
 	../mjl_splaytree.c \
+	../mjl_patricia.c \
 	../utils.c \
 	scamper.c \
 	scamper_osinfo.c \
@@ -658,6 +661,7 @@ clean-libLTLIBRARIES:
 	@$(MKDIR_P) ../$(DEPDIR)
 	@: > ../$(DEPDIR)/$(am__dirstamp)
 ../mjl_splaytree.lo: ../$(am__dirstamp) ../$(DEPDIR)/$(am__dirstamp)
+../mjl_patricia.lo: ../$(am__dirstamp) ../$(DEPDIR)/$(am__dirstamp)
 ../utils.lo: ../$(am__dirstamp) ../$(DEPDIR)/$(am__dirstamp)
 trace/$(am__dirstamp):
 	@$(MKDIR_P) trace
@@ -818,6 +822,8 @@ clean-binPROGRAMS:
 	../$(DEPDIR)/$(am__dirstamp)
 ../scamper-mjl_splaytree.$(OBJEXT): ../$(am__dirstamp) \
 	../$(DEPDIR)/$(am__dirstamp)
+../scamper-mjl_patricia.$(OBJEXT): ../$(am__dirstamp) \
+	../$(DEPDIR)/$(am__dirstamp)
 ../scamper-utils.$(OBJEXT): ../$(am__dirstamp) \
 	../$(DEPDIR)/$(am__dirstamp)
 trace/scamper-scamper_trace.$(OBJEXT): trace/$(am__dirstamp) \
@@ -920,9 +926,11 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@../$(DEPDIR)/mjl_patricia.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../$(DEPDIR)/mjl_splaytree.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../$(DEPDIR)/scamper-mjl_heap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../$(DEPDIR)/scamper-mjl_list.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../$(DEPDIR)/scamper-mjl_patricia.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../$(DEPDIR)/scamper-mjl_splaytree.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../$(DEPDIR)/scamper-utils.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../$(DEPDIR)/utils.Plo@am__quote@
@@ -1101,6 +1109,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../mjl_splaytree.c' object='../scamper-mjl_splaytree.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(scamper_CFLAGS) $(CFLAGS) -c -o ../scamper-mjl_splaytree.obj `if test -f '../mjl_splaytree.c'; then $(CYGPATH_W) '../mjl_splaytree.c'; else $(CYGPATH_W) '$(srcdir)/../mjl_splaytree.c'; fi`
+
+../scamper-mjl_patricia.o: ../mjl_patricia.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(scamper_CFLAGS) $(CFLAGS) -MT ../scamper-mjl_patricia.o -MD -MP -MF ../$(DEPDIR)/scamper-mjl_patricia.Tpo -c -o ../scamper-mjl_patricia.o `test -f '../mjl_patricia.c' || echo '$(srcdir)/'`../mjl_patricia.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) ../$(DEPDIR)/scamper-mjl_patricia.Tpo ../$(DEPDIR)/scamper-mjl_patricia.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../mjl_patricia.c' object='../scamper-mjl_patricia.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(scamper_CFLAGS) $(CFLAGS) -c -o ../scamper-mjl_patricia.o `test -f '../mjl_patricia.c' || echo '$(srcdir)/'`../mjl_patricia.c
+
+../scamper-mjl_patricia.obj: ../mjl_patricia.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(scamper_CFLAGS) $(CFLAGS) -MT ../scamper-mjl_patricia.obj -MD -MP -MF ../$(DEPDIR)/scamper-mjl_patricia.Tpo -c -o ../scamper-mjl_patricia.obj `if test -f '../mjl_patricia.c'; then $(CYGPATH_W) '../mjl_patricia.c'; else $(CYGPATH_W) '$(srcdir)/../mjl_patricia.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) ../$(DEPDIR)/scamper-mjl_patricia.Tpo ../$(DEPDIR)/scamper-mjl_patricia.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../mjl_patricia.c' object='../scamper-mjl_patricia.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(scamper_CFLAGS) $(CFLAGS) -c -o ../scamper-mjl_patricia.obj `if test -f '../mjl_patricia.c'; then $(CYGPATH_W) '../mjl_patricia.c'; else $(CYGPATH_W) '$(srcdir)/../mjl_patricia.c'; fi`
 
 ../scamper-utils.o: ../utils.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(scamper_CFLAGS) $(CFLAGS) -MT ../scamper-utils.o -MD -MP -MF ../$(DEPDIR)/scamper-utils.Tpo -c -o ../scamper-utils.o `test -f '../utils.c' || echo '$(srcdir)/'`../utils.c

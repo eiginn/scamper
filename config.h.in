@@ -48,6 +48,9 @@
 /* Define to 1 if you have the `getifaddrs' function. */
 #undef HAVE_GETIFADDRS
 
+/* Define to 1 if you have the `getpagesize' function. */
+#undef HAVE_GETPAGESIZE
+
 /* Define to 1 if you have the `gettimeofday' function. */
 #undef HAVE_GETTIMEOFDAY
 
@@ -93,11 +96,17 @@
 /* Define to 1 if you have the <netinet/ip_fw.h> header file. */
 #undef HAVE_NETINET_IP_FW_H
 
+/* Define to 1 if you have the <netinet/tcp_var.h> header file. */
+#undef HAVE_NETINET_TCP_VAR_H
+
 /* Define to 1 if you have the <net/if_dl.h> header file. */
 #undef HAVE_NET_IF_DL_H
 
 /* Define to 1 if you have the <net/if_types.h> header file. */
 #undef HAVE_NET_IF_TYPES_H
+
+/* Define to 1 if you have the <net/pfvar.h> header file. */
+#undef HAVE_NET_PFVAR_H
 
 /* Define to 1 if you have OpenSSL */
 #undef HAVE_OPENSSL
@@ -156,6 +165,18 @@
 /* Define to 1 if you have the `ip6_ext' struct. */
 #undef HAVE_STRUCT_IP6_EXT
 
+/* Define if struct pfioc_trans_e has a rs_num member */
+#undef HAVE_STRUCT_PFIOC_TRANS_E_RS_NUM
+
+/* Define if struct pfioc_trans_e has a type member */
+#undef HAVE_STRUCT_PFIOC_TRANS_E_TYPE
+
+/* Define if struct pf_rule has a nat member */
+#undef HAVE_STRUCT_PF_RULE_NAT
+
+/* Define if struct pf_rule has a rdr member */
+#undef HAVE_STRUCT_PF_RULE_RDR
+
 /* Define if struct sockaddr has an sa_len member */
 #undef HAVE_STRUCT_SOCKADDR_SA_LEN
 
@@ -206,6 +227,9 @@
 
 /* Define to 1 if `vfork' works. */
 #undef HAVE_WORKING_VFORK
+
+/* Define to 1 if the system has the `__builtin_clz' built-in function */
+#undef HAVE___BUILTIN_CLZ
 
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
 #undef LT_OBJDIR

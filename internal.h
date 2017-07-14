@@ -1,14 +1,15 @@
 /*
  * internal.h
  *
- * $Id: internal.h,v 1.29.4.1 2015/10/17 05:52:42 mjl Exp $
+ * $Id: internal.h,v 1.42 2016/09/17 01:38:13 mjl Exp $
  *
  *        Matthew Luckie
  *        mjl@luckie.org.nz
  *
  * Copyright (C) 2003-2006 Matthew Luckie
  * Copyright (C) 2006-2011 The University of Waikato
- * Copyright (C) 2013      The Regents of the University of California
+ * Copyright (C) 2013-2015 The Regents of the University of California
+ * Copyright (C) 2014-2016 Matthew Luckie
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,6 +33,7 @@ typedef unsigned __int32 uint32_t;
 typedef unsigned __int64 uint64_t;
 typedef __int8 int8_t;
 typedef __int16 int16_t;
+typedef __int32 int32_t;
 typedef int ssize_t;
 typedef int pid_t;
 typedef int socklen_t;
@@ -59,31 +61,26 @@ typedef unsigned short sa_family_t;
 #define _BSD_SOCKLEN_T_
 #define HAVE_BPF
 #define HAVE_BSD_ROUTE_SOCKET
-#define HAVE_SOCKADDR_SA_LEN
 #endif
 
 #if defined(__FreeBSD__)
 #define HAVE_BPF
 #define HAVE_BSD_ROUTE_SOCKET
-#define HAVE_SOCKADDR_SA_LEN
 #endif
 
 #if defined(__NetBSD__)
 #define HAVE_BPF
 #define HAVE_BSD_ROUTE_SOCKET
-#define HAVE_SOCKADDR_SA_LEN
 #endif
 
 #if defined(__OpenBSD__)
 #define HAVE_BPF
 #define HAVE_BSD_ROUTE_SOCKET
-#define HAVE_SOCKADDR_SA_LEN
 #endif
 
 #if defined(__DragonFly__)
 #define HAVE_BPF
 #define HAVE_BSD_ROUTE_SOCKET
-#define HAVE_SOCKADDR_SA_LEN
 #endif
 
 #if defined(__linux__)
@@ -123,6 +120,7 @@ typedef unsigned short sa_family_t;
 #include <sys/un.h>
 #include <sys/utsname.h>
 #include <sys/ioctl.h>
+#include <sys/socketvar.h>
 #include <net/if.h>
 #include <net/route.h>
 #include <netinet/in.h>
@@ -133,6 +131,9 @@ typedef unsigned short sa_family_t;
 #include <netinet/udp.h>
 #include <netinet/icmp6.h>
 #include <netinet/tcp.h>
+#ifdef HAVE_NETINET_TCP_VAR_H
+#include <netinet/tcp_var.h>
+#endif
 #include <netinet/if_ether.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -189,10 +190,10 @@ typedef unsigned short sa_family_t;
 
 #ifdef HAVE_NETINET_IP_FW_H
 #define HAVE_IPFW
-#include <netinet/ip_fw.h>
-#ifdef HAVE_NETINET6_IP_FW_H
-#include <netinet6/ip6_fw.h>
 #endif
+
+#ifdef HAVE_NET_PFVAR_H
+#define HAVE_PF
 #endif
 
 #include <stdarg.h>
@@ -214,6 +215,9 @@ typedef unsigned short sa_family_t;
 #define IP_HDR_HTONS
 #endif
 #if defined(__OpenBSD__) && OpenBSD >= 199706
+#define IP_HDR_HTONS
+#endif
+#if defined(__FreeBSD__) && __FreeBSD_version >= 1100030
 #define IP_HDR_HTONS
 #endif
 

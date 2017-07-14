@@ -1,10 +1,11 @@
 /*
  * scamper.h
  *
- * $Id: scamper.h,v 1.52.14.6 2016/01/08 08:27:43 mjl Exp $
+ * $Id: scamper.h,v 1.57.4.2 2017/06/22 08:47:17 mjl Exp $
  *
  * Copyright (C) 2003-2006 Matthew Luckie
  * Copyright (C) 2006-2011 The University of Waikato
+ * Copyright (C) 2015      Matthew Luckie
  * Author: Matthew Luckie
  *
  * This program is free software; you can redistribute it and/or modify
@@ -44,7 +45,6 @@ int scamper_command_set(const char *command);
 const char *scamper_monitorname_get(void);
 int scamper_monitorname_set(const char *monitorname);
 
-int scamper_option_dl(void);
 int scamper_option_planetlab(void);
 int scamper_option_noinitndc(void);
 int scamper_option_notls(void);
@@ -53,11 +53,13 @@ int scamper_option_kqueue(void);
 int scamper_option_epoll(void);
 int scamper_option_rawtcp(void);
 int scamper_option_debugfileappend(void);
+int scamper_option_tls(void);
+int scamper_option_daemon(void);
 
 void scamper_exitwhendone(int on);
 
 uint16_t scamper_sport_default(void);
 
-#define SCAMPER_VERSION "20141211d"
+#define SCAMPER_VERSION "20161204a"
 
 #endif /* __SCAMPER_H */

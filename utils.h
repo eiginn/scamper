@@ -1,11 +1,12 @@
 /*
  * utils.h
  *
- * $Id: utils.h,v 1.110.2.2 2016/01/08 07:48:51 mjl Exp $
+ * $Id: utils.h,v 1.114 2016/08/27 07:11:36 mjl Exp $
  *
  * Copyright (C) 2004-2006 Matthew Luckie
  * Copyright (C) 2006-2011 The University of Waikato
  * Copyright (C) 2012-2014 The Regents of the University of California
+ * Copyright (C) 2015      Matthew Luckie
  * Author: Matthew Luckie
  *
  * This program is free software; you can redistribute it and/or modify
@@ -101,9 +102,10 @@ int array_insert_gb_dm(void ***a, int *nmemb, int *mmemb, int growby,
 /*
  * Functions for dealing with raw IPv4/IPv6 addresses
  */
-
-int addr6_cmp(const void *a, const void *b);
 int addr4_cmp(const void *a, const void *b);
+int addr4_human_cmp(const void *a, const void *b);
+int addr6_cmp(const void *a, const void *b);
+int addr6_human_cmp(const void *a, const void *b);
 int addr_cmp(const int af, const void *a, const void *b);
 void *addr_dup(const int af, const void *addr);
 const char *addr_tostr(int af, const void *addr, char *buf, size_t len);
@@ -142,6 +144,7 @@ char *string_lastof_char(char *str, const char delim);
 char *string_firstof_char(char *str, const char delim);
 char *string_concat(char *str, size_t len, size_t *off, const char *fs, ...);
 const char *string_findlc(const char *str, const char *find);
+int   string_addrport(const char *in, char **addr, int *port);
 
 /* check the character to see if it is possibly hex */
 int ishex(char c);

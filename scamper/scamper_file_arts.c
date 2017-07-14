@@ -1,7 +1,7 @@
 /*
  * scamper_file_arts.c
  *
- * $Id: scamper_file_arts.c,v 1.61 2014/06/12 19:59:48 mjl Exp $
+ * $Id: scamper_file_arts.c,v 1.62.4.1 2017/06/22 08:33:25 mjl Exp $
  *
  * code to read the legacy arts data file format into scamper_hop structures.
  *
@@ -27,7 +27,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-  "$Id: scamper_file_arts.c,v 1.61 2014/06/12 19:59:48 mjl Exp $";
+  "$Id: scamper_file_arts.c,v 1.62.4.1 2017/06/22 08:33:25 mjl Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -245,13 +245,12 @@ static int arts_hop_read(scamper_trace_hop_t *hop, const uint8_t *buf,
   hop->hop_rtt.tv_usec = 0;
 
   /* read the 1 byte hop number this path entry refers to */
-  assert(hop->hop_probe_ttl > 0);
+  if(hop->hop_probe_ttl == 0)
+    return -1;
 
   /* the IPv4 address of the hop that responded */
   if((hop->hop_addr = scamper_addr_alloc_ipv4(buf+i)) == NULL)
-    {
-      return -1;
-    }
+    return -1;
   i += 4;
 
   /* arts 1 always stores RTT per hop; arts > 1 conditionally stores it */
@@ -276,6 +275,7 @@ static scamper_trace_hop_t *arts_hops_read(const arts_header_t *ah,
 {
   scamper_trace_hop_t *head = NULL, *hop = NULL;
   int i = 0;
+  int rc;
 
   if(count == 0)
     {
@@ -295,11 +295,11 @@ static scamper_trace_hop_t *arts_hops_read(const arts_header_t *ah,
 	}
 
       if(hop == NULL)
-	{
 	  goto err;
-	}
 
-      i += arts_hop_read(hop, buf+i, ah);
+      if((rc = arts_hop_read(hop, buf+i, ah)) <= 0)
+	goto err;
+      i += rc;
     }
 
   *off += i;
@@ -311,10 +311,8 @@ static scamper_trace_hop_t *arts_hops_read(const arts_header_t *ah,
   return NULL;
 }
 
-static int arts_list_cmp(const void *va, const void *vb)
+static int arts_list_cmp(const scamper_list_t *a, const scamper_list_t *b)
 {
-  const scamper_list_t *a = (const scamper_list_t *)va;
-  const scamper_list_t *b = (const scamper_list_t *)vb;
   if(a->id < b->id) return -1;
   if(a->id > b->id) return  1;
   return 0;
@@ -328,9 +326,7 @@ static scamper_list_t *arts_list_get(arts_state_t *state, uint32_t id)
   if((list = splaytree_find(state->list_tree, &findme)) == NULL)
     {
       if((list = scamper_list_alloc(id, NULL, NULL, NULL)) == NULL)
-	{
-	  return NULL;
-	}
+	return NULL;
 
       if(splaytree_insert(state->list_tree, list) == NULL)
 	{
@@ -342,17 +338,13 @@ static scamper_list_t *arts_list_get(arts_state_t *state, uint32_t id)
   return list;
 }
 
-static int arts_cycle_cmp(const void *va, const void *vb)
+static int arts_cycle_cmp(const scamper_cycle_t *a, const scamper_cycle_t *b)
 {
-  const scamper_cycle_t *a = (const scamper_cycle_t *)va;
-  const scamper_cycle_t *b = (const scamper_cycle_t *)vb;
-
-  int i = arts_list_cmp(a->list, b->list);
-
-  if(i != 0)        return i;
+  int i;
+  if((i = arts_list_cmp(a->list, b->list)) != 0)
+    return i;
   if(a->id < b->id) return -1;
   if(a->id > b->id) return  1;
-
   return 0;
 }
 
@@ -366,9 +358,7 @@ static scamper_cycle_t *arts_cycle_get(arts_state_t *state,
   if((cycle = splaytree_find(state->cycle_tree, &findme)) == NULL)
     {
       if((cycle = scamper_cycle_alloc(list)) == NULL)
-	{
-	  return NULL;
-	}
+	return NULL;
       cycle->id = id;
 
       if(splaytree_insert(state->cycle_tree, cycle) == NULL)
@@ -429,15 +419,11 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
   i = 0;
 
   if((trace->src = scamper_addr_alloc_ipv4(buf+i)) == NULL)
-    {
-      goto err;
-    }
+    goto err;
   i += 4;
 
   if((trace->dst = scamper_addr_alloc_ipv4(buf+i)) == NULL)
-    {
-      goto err;
-    }
+    goto err;
   i += 4;
 
   if(ah->ver >= 3)
@@ -445,17 +431,13 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
       /* list id */
       memcpy(&junk32, buf+i, 4); i += 4; junk32 = ntohl(junk32);
       if((trace->list = arts_list_get(state, junk32)) == NULL)
-	{
-	  goto err;
-	}
+	goto err;
       scamper_list_use(trace->list);
 
       /* cycle id */
       memcpy(&junk32, buf+i, 4); i += 4; junk32 = ntohl(junk32);
       if((trace->cycle = arts_cycle_get(state, trace->list, junk32)) == NULL)
-	{
-	  goto err;
-	}
+	goto err;
       scamper_cycle_use(trace->cycle);
     }
 
@@ -488,9 +470,7 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
   destination_replied = junk8 >> 7;
 
   if(destination_replied != 0)
-    {
-      trace->stop_reason = SCAMPER_TRACE_STOP_COMPLETED;
-    }
+    trace->stop_reason = SCAMPER_TRACE_STOP_COMPLETED;
   num_hop_recs = junk8 & 0x7f;
 
   /*
@@ -535,9 +515,7 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
    * can estimate the number of hops on the reverse path
    */
   if(ah->ver >= 2)
-    {
-      reply_ttl = buf[i++];
-    }
+    reply_ttl = buf[i++];
 
   if(num_hop_recs > 0 &&
      (hops = arts_hops_read(ah, buf+i, num_hop_recs, &i)) == NULL)
@@ -548,10 +526,9 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
     }
 
   if(destination_replied != 0)
-    {
-      max_hop = hop_distance;
-    }
-  else max_hop = 0;
+    max_hop = hop_distance;
+  else
+    max_hop = 0;
 
   /*
    * make a pass through all ArtsIpPathEntry structures.  figure out
@@ -564,9 +541,7 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
       for(;;)
 	{
 	  if(max_hop < hop->hop_probe_ttl)
-	    {
-	      max_hop = hop->hop_probe_ttl;
-	    }
+	    max_hop = hop->hop_probe_ttl;
 
 	  if(hop->hop_next == NULL)
 	    {
@@ -575,7 +550,6 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
 		  hop->hop_icmp_type = ICMP_UNREACH;
 		  hop->hop_icmp_code = trace->stop_data;
 		}
-
 	      break;
 	    }
 
@@ -583,18 +557,15 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
 	}
     }
 
-  assert((uint32_t)i == ah->data_length);
+  if((uint32_t)i != ah->data_length)
+    goto err;
   free(buf); buf = NULL;
 
   if(max_hop == 0)
-    {
-      return trace;
-    }
+    return trace;
 
   if(scamper_trace_hops_alloc(trace, max_hop) == -1)
-    {
-      goto err;
-    }
+    goto err;
   trace->hop_count = max_hop;
 
   /*
@@ -622,9 +593,7 @@ static scamper_trace_t *arts_read_trace(const scamper_file_t *sf,
   if(destination_replied != 0)
     {
       if((hop = arts_hop_reply(trace->dst, rtt, hop_distance)) == NULL)
-	{
-	  goto err;
-	}
+	goto err;
 
       if(ah->ver >= 2)
 	{
@@ -655,15 +624,9 @@ static int arts_skip(scamper_file_t *sf, uint32_t bytes)
   if(state->ispipe == 0)
     {
       if(lseek(fd, bytes, SEEK_CUR) != -1)
-	{
-	  return 0;
-	}
-
+	return 0;
       if(errno != ESPIPE)
-	{
-	  return -1;
-	}
-
+	return -1;
       state->ispipe = 1;
     }
 
@@ -671,9 +634,7 @@ static int arts_skip(scamper_file_t *sf, uint32_t bytes)
     {
       len = (sizeof(buf) < bytes) ? sizeof(buf) : bytes;
       if(read_wrap(fd, buf, NULL, len) != 0)
-	{
-	  return -1;
-	}
+	return -1;
       bytes -= len;
     }
 
@@ -705,23 +666,21 @@ int scamper_file_arts_read(scamper_file_t *sf, scamper_file_filter_t *filter,
 	  return -1;
 	}
 
+      if(ah.data_length == 0)
+	return -1;
+
       if(ah.id == ARTS_IP_PATH &&
 	 scamper_file_filter_isset(filter, SCAMPER_FILE_OBJ_TRACE))
 	{
 	  if((*data = arts_read_trace(sf, &ah)) == NULL)
-	    {
-	      return -1;
-	    }
+	    return -1;
 	  *type = SCAMPER_FILE_OBJ_TRACE;
-
 	  return 0;
 	}
 
       /* skip over */
       if(arts_skip(sf, ah.data_length) != 0)
-	{
-	  return -1;
-	}
+	return -1;
     }
 
   return 0;
@@ -733,21 +692,15 @@ int scamper_file_arts_is(const scamper_file_t *sf)
   int fd = scamper_file_getfd(sf);
 
   if(lseek(fd, 0, SEEK_SET) == -1)
-    {
-      return 0;
-    }
+    return 0;
 
   if(read_wrap(fd, &magic16, NULL, sizeof(magic16)) != 0)
-    {
-      return 0;
-    }
+    return 0;
 
   if(ntohs(magic16) == ARTS_MAGIC)
     {
       if(lseek(fd, 0, SEEK_SET) == -1)
-	{
-	  return 0;
-	}
+	return 0;
       return 1;
     }
 
@@ -757,49 +710,28 @@ int scamper_file_arts_is(const scamper_file_t *sf)
 static void arts_state_free(arts_state_t *state)
 {
   if(state == NULL)
-    {
-      return;
-    }
+    return;
 
   if(state->list_tree != NULL)
-    {
-      splaytree_free(state->list_tree, (splaytree_free_t)scamper_list_free);
-    }
-
+    splaytree_free(state->list_tree, (splaytree_free_t)scamper_list_free);
   if(state->cycle_tree != NULL)
-    {
-      splaytree_free(state->cycle_tree, (splaytree_free_t)scamper_cycle_free);
-    }
-
+    splaytree_free(state->cycle_tree, (splaytree_free_t)scamper_cycle_free);
   free(state);
   return;
 }
 
 int scamper_file_arts_init_read(scamper_file_t *sf)
 {
-  arts_state_t *state;
-
-  if((state = (arts_state_t *)malloc_zero(sizeof(arts_state_t))) == NULL)
+  arts_state_t *s;
+  if((s = (arts_state_t *)malloc_zero(sizeof(arts_state_t))) == NULL ||
+     (s->list_tree=splaytree_alloc((splaytree_cmp_t)arts_list_cmp)) == NULL ||
+     (s->cycle_tree=splaytree_alloc((splaytree_cmp_t)arts_cycle_cmp)) == NULL)
     {
-      goto err;
+      arts_state_free(s);
+      return -1;
     }
-
-  if((state->list_tree = splaytree_alloc(arts_list_cmp)) == NULL)
-    {
-      goto err;
-    }
-
-  if((state->cycle_tree = splaytree_alloc(arts_cycle_cmp)) == NULL)
-    {
-      goto err;
-    }
-
-  scamper_file_setstate(sf, state);
+  scamper_file_setstate(sf, s);
   return 0;
-
- err:
-  arts_state_free(state);
-  return -1;
 }
 
 void scamper_file_arts_free_state(scamper_file_t *sf)
