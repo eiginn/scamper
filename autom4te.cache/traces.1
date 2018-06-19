@@ -1687,10 +1687,10 @@ m4trace:/usr/local/share/aclocal/lt~obsolete.m4:99: -1- AC_DEFUN([_LT_PROG_CXX])
 m4trace:/usr/local/share/aclocal-1.15/amversion.m4:14: -1- AC_DEFUN([AM_AUTOMAKE_VERSION], [am__api_version='1.15'
 dnl Some users find AM_AUTOMAKE_VERSION and mistake it for a way to
 dnl require some minimum version.  Point them to the right macro.
-m4_if([$1], [1.15], [],
+m4_if([$1], [1.15.1], [],
       [AC_FATAL([Do not call $0, use AM_INIT_AUTOMAKE([$1]).])])dnl
 ])
-m4trace:/usr/local/share/aclocal-1.15/amversion.m4:33: -1- AC_DEFUN([AM_SET_CURRENT_AUTOMAKE_VERSION], [AM_AUTOMAKE_VERSION([1.15])dnl
+m4trace:/usr/local/share/aclocal-1.15/amversion.m4:33: -1- AC_DEFUN([AM_SET_CURRENT_AUTOMAKE_VERSION], [AM_AUTOMAKE_VERSION([1.15.1])dnl
 m4_ifndef([AC_AUTOCONF_VERSION],
   [m4_copy([m4_PACKAGE_VERSION], [AC_AUTOCONF_VERSION])])dnl
 _AM_AUTOCONF_VERSION(m4_defn([AC_AUTOCONF_VERSION]))])
@@ -2602,6 +2602,408 @@ m4trace:m4/ax_gcc_builtin.m4:96: -1- AC_DEFUN([AX_GCC_BUILTIN], [
 
     AS_VAR_POPDEF([ac_var])
 ])
+m4trace:m4/ax_pthread.m4:87: -1- AU_DEFUN([ACX_PTHREAD], [m4_if($#, 0, [AX_PTHREAD], [AX_PTHREAD($@)])])
+m4trace:m4/ax_pthread.m4:87: -1- AC_DEFUN([ACX_PTHREAD], [AC_DIAGNOSE([obsolete], [The macro `ACX_PTHREAD' is obsolete.
+You should run autoupdate.])dnl
+m4_if($#, 0, [AX_PTHREAD], [AX_PTHREAD($@)])])
+m4trace:m4/ax_pthread.m4:88: -1- AC_DEFUN([AX_PTHREAD], [
+AC_REQUIRE([AC_CANONICAL_HOST])
+AC_REQUIRE([AC_PROG_CC])
+AC_REQUIRE([AC_PROG_SED])
+AC_LANG_PUSH([C])
+ax_pthread_ok=no
+
+# We used to check for pthread.h first, but this fails if pthread.h
+# requires special compiler flags (e.g. on Tru64 or Sequent).
+# It gets checked for in the link test anyway.
+
+# First of all, check if the user has set any of the PTHREAD_LIBS,
+# etcetera environment variables, and if threads linking works using
+# them:
+if test "x$PTHREAD_CFLAGS$PTHREAD_LIBS" != "x"; then
+        ax_pthread_save_CC="$CC"
+        ax_pthread_save_CFLAGS="$CFLAGS"
+        ax_pthread_save_LIBS="$LIBS"
+        AS_IF([test "x$PTHREAD_CC" != "x"], [CC="$PTHREAD_CC"])
+        CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+        LIBS="$PTHREAD_LIBS $LIBS"
+        AC_MSG_CHECKING([for pthread_join using $CC $PTHREAD_CFLAGS $PTHREAD_LIBS])
+        AC_LINK_IFELSE([AC_LANG_CALL([], [pthread_join])], [ax_pthread_ok=yes])
+        AC_MSG_RESULT([$ax_pthread_ok])
+        if test "x$ax_pthread_ok" = "xno"; then
+                PTHREAD_LIBS=""
+                PTHREAD_CFLAGS=""
+        fi
+        CC="$ax_pthread_save_CC"
+        CFLAGS="$ax_pthread_save_CFLAGS"
+        LIBS="$ax_pthread_save_LIBS"
+fi
+
+# We must check for the threads library under a number of different
+# names; the ordering is very important because some systems
+# (e.g. DEC) have both -lpthread and -lpthreads, where one of the
+# libraries is broken (non-POSIX).
+
+# Create a list of thread flags to try.  Items starting with a "-" are
+# C compiler flags, and other items are library names, except for "none"
+# which indicates that we try without any flags at all, and "pthread-config"
+# which is a program returning the flags for the Pth emulation library.
+
+ax_pthread_flags="pthreads none -Kthread -pthread -pthreads -mthreads pthread --thread-safe -mt pthread-config"
+
+# The ordering *is* (sometimes) important.  Some notes on the
+# individual items follow:
+
+# pthreads: AIX (must check this before -lpthread)
+# none: in case threads are in libc; should be tried before -Kthread and
+#       other compiler flags to prevent continual compiler warnings
+# -Kthread: Sequent (threads in libc, but -Kthread needed for pthread.h)
+# -pthread: Linux/gcc (kernel threads), BSD/gcc (userland threads), Tru64
+#           (Note: HP C rejects this with "bad form for `-t' option")
+# -pthreads: Solaris/gcc (Note: HP C also rejects)
+# -mt: Sun Workshop C (may only link SunOS threads [-lthread], but it
+#      doesn't hurt to check since this sometimes defines pthreads and
+#      -D_REENTRANT too), HP C (must be checked before -lpthread, which
+#      is present but should not be used directly; and before -mthreads,
+#      because the compiler interprets this as "-mt" + "-hreads")
+# -mthreads: Mingw32/gcc, Lynx/gcc
+# pthread: Linux, etcetera
+# --thread-safe: KAI C++
+# pthread-config: use pthread-config program (for GNU Pth library)
+
+case $host_os in
+
+        freebsd*)
+
+        # -kthread: FreeBSD kernel threads (preferred to -pthread since SMP-able)
+        # lthread: LinuxThreads port on FreeBSD (also preferred to -pthread)
+
+        ax_pthread_flags="-kthread lthread $ax_pthread_flags"
+        ;;
+
+        hpux*)
+
+        # From the cc(1) man page: "[-mt] Sets various -D flags to enable
+        # multi-threading and also sets -lpthread."
+
+        ax_pthread_flags="-mt -pthread pthread $ax_pthread_flags"
+        ;;
+
+        openedition*)
+
+        # IBM z/OS requires a feature-test macro to be defined in order to
+        # enable POSIX threads at all, so give the user a hint if this is
+        # not set. (We don't define these ourselves, as they can affect
+        # other portions of the system API in unpredictable ways.)
+
+        AC_EGREP_CPP([AX_PTHREAD_ZOS_MISSING],
+            [
+#            if !defined(_OPEN_THREADS) && !defined(_UNIX03_THREADS)
+             AX_PTHREAD_ZOS_MISSING
+#            endif
+            ],
+            [AC_MSG_WARN([IBM z/OS requires -D_OPEN_THREADS or -D_UNIX03_THREADS to enable pthreads support.])])
+        ;;
+
+        solaris*)
+
+        # On Solaris (at least, for some versions), libc contains stubbed
+        # (non-functional) versions of the pthreads routines, so link-based
+        # tests will erroneously succeed. (N.B.: The stubs are missing
+        # pthread_cleanup_push, or rather a function called by this macro,
+        # so we could check for that, but who knows whether they'll stub
+        # that too in a future libc.)  So we'll check first for the
+        # standard Solaris way of linking pthreads (-mt -lpthread).
+
+        ax_pthread_flags="-mt,pthread pthread $ax_pthread_flags"
+        ;;
+esac
+
+# GCC generally uses -pthread, or -pthreads on some platforms (e.g. SPARC)
+
+AS_IF([test "x$GCC" = "xyes"],
+      [ax_pthread_flags="-pthread -pthreads $ax_pthread_flags"])
+
+# The presence of a feature test macro requesting re-entrant function
+# definitions is, on some systems, a strong hint that pthreads support is
+# correctly enabled
+
+case $host_os in
+        darwin* | hpux* | linux* | osf* | solaris*)
+        ax_pthread_check_macro="_REENTRANT"
+        ;;
+
+        aix*)
+        ax_pthread_check_macro="_THREAD_SAFE"
+        ;;
+
+        *)
+        ax_pthread_check_macro="--"
+        ;;
+esac
+AS_IF([test "x$ax_pthread_check_macro" = "x--"],
+      [ax_pthread_check_cond=0],
+      [ax_pthread_check_cond="!defined($ax_pthread_check_macro)"])
+
+# Are we compiling with Clang?
+
+AC_CACHE_CHECK([whether $CC is Clang],
+    [ax_cv_PTHREAD_CLANG],
+    [ax_cv_PTHREAD_CLANG=no
+     # Note that Autoconf sets GCC=yes for Clang as well as GCC
+     if test "x$GCC" = "xyes"; then
+        AC_EGREP_CPP([AX_PTHREAD_CC_IS_CLANG],
+            [/* Note: Clang 2.7 lacks __clang_[a-z]+__ */
+#            if defined(__clang__) && defined(__llvm__)
+             AX_PTHREAD_CC_IS_CLANG
+#            endif
+            ],
+            [ax_cv_PTHREAD_CLANG=yes])
+     fi
+    ])
+ax_pthread_clang="$ax_cv_PTHREAD_CLANG"
+
+ax_pthread_clang_warning=no
+
+# Clang needs special handling, because older versions handle the -pthread
+# option in a rather... idiosyncratic way
+
+if test "x$ax_pthread_clang" = "xyes"; then
+
+        # Clang takes -pthread; it has never supported any other flag
+
+        # (Note 1: This will need to be revisited if a system that Clang
+        # supports has POSIX threads in a separate library.  This tends not
+        # to be the way of modern systems, but it's conceivable.)
+
+        # (Note 2: On some systems, notably Darwin, -pthread is not needed
+        # to get POSIX threads support; the API is always present and
+        # active.  We could reasonably leave PTHREAD_CFLAGS empty.  But
+        # -pthread does define _REENTRANT, and while the Darwin headers
+        # ignore this macro, third-party headers might not.)
+
+        PTHREAD_CFLAGS="-pthread"
+        PTHREAD_LIBS=
+
+        ax_pthread_ok=yes
+
+        # However, older versions of Clang make a point of warning the user
+        # that, in an invocation where only linking and no compilation is
+        # taking place, the -pthread option has no effect ("argument unused
+        # during compilation").  They expect -pthread to be passed in only
+        # when source code is being compiled.
+        #
+        # Problem is, this is at odds with the way Automake and most other
+        # C build frameworks function, which is that the same flags used in
+        # compilation (CFLAGS) are also used in linking.  Many systems
+        # supported by AX_PTHREAD require exactly this for POSIX threads
+        # support, and in fact it is often not straightforward to specify a
+        # flag that is used only in the compilation phase and not in
+        # linking.  Such a scenario is extremely rare in practice.
+        #
+        # Even though use of the -pthread flag in linking would only print
+        # a warning, this can be a nuisance for well-run software projects
+        # that build with -Werror.  So if the active version of Clang has
+        # this misfeature, we search for an option to squash it.
+
+        AC_CACHE_CHECK([whether Clang needs flag to prevent "argument unused" warning when linking with -pthread],
+            [ax_cv_PTHREAD_CLANG_NO_WARN_FLAG],
+            [ax_cv_PTHREAD_CLANG_NO_WARN_FLAG=unknown
+             # Create an alternate version of $ac_link that compiles and
+             # links in two steps (.c -> .o, .o -> exe) instead of one
+             # (.c -> exe), because the warning occurs only in the second
+             # step
+             ax_pthread_save_ac_link="$ac_link"
+             ax_pthread_sed='s/conftest\.\$ac_ext/conftest.$ac_objext/g'
+             ax_pthread_link_step=`$as_echo "$ac_link" | sed "$ax_pthread_sed"`
+             ax_pthread_2step_ac_link="($ac_compile) && (echo ==== >&5) && ($ax_pthread_link_step)"
+             ax_pthread_save_CFLAGS="$CFLAGS"
+             for ax_pthread_try in '' -Qunused-arguments -Wno-unused-command-line-argument unknown; do
+                AS_IF([test "x$ax_pthread_try" = "xunknown"], [break])
+                CFLAGS="-Werror -Wunknown-warning-option $ax_pthread_try -pthread $ax_pthread_save_CFLAGS"
+                ac_link="$ax_pthread_save_ac_link"
+                AC_LINK_IFELSE([AC_LANG_SOURCE([[int main(void){return 0;}]])],
+                    [ac_link="$ax_pthread_2step_ac_link"
+                     AC_LINK_IFELSE([AC_LANG_SOURCE([[int main(void){return 0;}]])],
+                         [break])
+                    ])
+             done
+             ac_link="$ax_pthread_save_ac_link"
+             CFLAGS="$ax_pthread_save_CFLAGS"
+             AS_IF([test "x$ax_pthread_try" = "x"], [ax_pthread_try=no])
+             ax_cv_PTHREAD_CLANG_NO_WARN_FLAG="$ax_pthread_try"
+            ])
+
+        case "$ax_cv_PTHREAD_CLANG_NO_WARN_FLAG" in
+                no | unknown) ;;
+                *) PTHREAD_CFLAGS="$ax_cv_PTHREAD_CLANG_NO_WARN_FLAG $PTHREAD_CFLAGS" ;;
+        esac
+
+fi # $ax_pthread_clang = yes
+
+if test "x$ax_pthread_ok" = "xno"; then
+for ax_pthread_try_flag in $ax_pthread_flags; do
+
+        case $ax_pthread_try_flag in
+                none)
+                AC_MSG_CHECKING([whether pthreads work without any flags])
+                ;;
+
+                -mt,pthread)
+                AC_MSG_CHECKING([whether pthreads work with -mt -lpthread])
+                PTHREAD_CFLAGS="-mt"
+                PTHREAD_LIBS="-lpthread"
+                ;;
+
+                -*)
+                AC_MSG_CHECKING([whether pthreads work with $ax_pthread_try_flag])
+                PTHREAD_CFLAGS="$ax_pthread_try_flag"
+                ;;
+
+                pthread-config)
+                AC_CHECK_PROG([ax_pthread_config], [pthread-config], [yes], [no])
+                AS_IF([test "x$ax_pthread_config" = "xno"], [continue])
+                PTHREAD_CFLAGS="`pthread-config --cflags`"
+                PTHREAD_LIBS="`pthread-config --ldflags` `pthread-config --libs`"
+                ;;
+
+                *)
+                AC_MSG_CHECKING([for the pthreads library -l$ax_pthread_try_flag])
+                PTHREAD_LIBS="-l$ax_pthread_try_flag"
+                ;;
+        esac
+
+        ax_pthread_save_CFLAGS="$CFLAGS"
+        ax_pthread_save_LIBS="$LIBS"
+        CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+        LIBS="$PTHREAD_LIBS $LIBS"
+
+        # Check for various functions.  We must include pthread.h,
+        # since some functions may be macros.  (On the Sequent, we
+        # need a special flag -Kthread to make this header compile.)
+        # We check for pthread_join because it is in -lpthread on IRIX
+        # while pthread_create is in libc.  We check for pthread_attr_init
+        # due to DEC craziness with -lpthreads.  We check for
+        # pthread_cleanup_push because it is one of the few pthread
+        # functions on Solaris that doesn't have a non-functional libc stub.
+        # We try pthread_create on general principles.
+
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <pthread.h>
+#                       if $ax_pthread_check_cond
+#                        error "$ax_pthread_check_macro must be defined"
+#                       endif
+                        static void routine(void *a) { a = 0; }
+                        static void *start_routine(void *a) { return a; }],
+                       [pthread_t th; pthread_attr_t attr;
+                        pthread_create(&th, 0, start_routine, 0);
+                        pthread_join(th, 0);
+                        pthread_attr_init(&attr);
+                        pthread_cleanup_push(routine, 0);
+                        pthread_cleanup_pop(0) /* ; */])],
+            [ax_pthread_ok=yes],
+            [])
+
+        CFLAGS="$ax_pthread_save_CFLAGS"
+        LIBS="$ax_pthread_save_LIBS"
+
+        AC_MSG_RESULT([$ax_pthread_ok])
+        AS_IF([test "x$ax_pthread_ok" = "xyes"], [break])
+
+        PTHREAD_LIBS=""
+        PTHREAD_CFLAGS=""
+done
+fi
+
+# Various other checks:
+if test "x$ax_pthread_ok" = "xyes"; then
+        ax_pthread_save_CFLAGS="$CFLAGS"
+        ax_pthread_save_LIBS="$LIBS"
+        CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+        LIBS="$PTHREAD_LIBS $LIBS"
+
+        # Detect AIX lossage: JOINABLE attribute is called UNDETACHED.
+        AC_CACHE_CHECK([for joinable pthread attribute],
+            [ax_cv_PTHREAD_JOINABLE_ATTR],
+            [ax_cv_PTHREAD_JOINABLE_ATTR=unknown
+             for ax_pthread_attr in PTHREAD_CREATE_JOINABLE PTHREAD_CREATE_UNDETACHED; do
+                 AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <pthread.h>],
+                                                 [int attr = $ax_pthread_attr; return attr /* ; */])],
+                                [ax_cv_PTHREAD_JOINABLE_ATTR=$ax_pthread_attr; break],
+                                [])
+             done
+            ])
+        AS_IF([test "x$ax_cv_PTHREAD_JOINABLE_ATTR" != "xunknown" && \
+               test "x$ax_cv_PTHREAD_JOINABLE_ATTR" != "xPTHREAD_CREATE_JOINABLE" && \
+               test "x$ax_pthread_joinable_attr_defined" != "xyes"],
+              [AC_DEFINE_UNQUOTED([PTHREAD_CREATE_JOINABLE],
+                                  [$ax_cv_PTHREAD_JOINABLE_ATTR],
+                                  [Define to necessary symbol if this constant
+                                   uses a non-standard name on your system.])
+               ax_pthread_joinable_attr_defined=yes
+              ])
+
+        AC_CACHE_CHECK([whether more special flags are required for pthreads],
+            [ax_cv_PTHREAD_SPECIAL_FLAGS],
+            [ax_cv_PTHREAD_SPECIAL_FLAGS=no
+             case $host_os in
+             solaris*)
+             ax_cv_PTHREAD_SPECIAL_FLAGS="-D_POSIX_PTHREAD_SEMANTICS"
+             ;;
+             esac
+            ])
+        AS_IF([test "x$ax_cv_PTHREAD_SPECIAL_FLAGS" != "xno" && \
+               test "x$ax_pthread_special_flags_added" != "xyes"],
+              [PTHREAD_CFLAGS="$ax_cv_PTHREAD_SPECIAL_FLAGS $PTHREAD_CFLAGS"
+               ax_pthread_special_flags_added=yes])
+
+        AC_CACHE_CHECK([for PTHREAD_PRIO_INHERIT],
+            [ax_cv_PTHREAD_PRIO_INHERIT],
+            [AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <pthread.h>]],
+                                             [[int i = PTHREAD_PRIO_INHERIT;]])],
+                            [ax_cv_PTHREAD_PRIO_INHERIT=yes],
+                            [ax_cv_PTHREAD_PRIO_INHERIT=no])
+            ])
+        AS_IF([test "x$ax_cv_PTHREAD_PRIO_INHERIT" = "xyes" && \
+               test "x$ax_pthread_prio_inherit_defined" != "xyes"],
+              [AC_DEFINE([HAVE_PTHREAD_PRIO_INHERIT], [1], [Have PTHREAD_PRIO_INHERIT.])
+               ax_pthread_prio_inherit_defined=yes
+              ])
+
+        CFLAGS="$ax_pthread_save_CFLAGS"
+        LIBS="$ax_pthread_save_LIBS"
+
+        # More AIX lossage: compile with *_r variant
+        if test "x$GCC" != "xyes"; then
+            case $host_os in
+                aix*)
+                AS_CASE(["x/$CC"],
+                    [x*/c89|x*/c89_128|x*/c99|x*/c99_128|x*/cc|x*/cc128|x*/xlc|x*/xlc_v6|x*/xlc128|x*/xlc128_v6],
+                    [#handle absolute path differently from PATH based program lookup
+                     AS_CASE(["x$CC"],
+                         [x/*],
+                         [AS_IF([AS_EXECUTABLE_P([${CC}_r])],[PTHREAD_CC="${CC}_r"])],
+                         [AC_CHECK_PROGS([PTHREAD_CC],[${CC}_r],[$CC])])])
+                ;;
+            esac
+        fi
+fi
+
+test -n "$PTHREAD_CC" || PTHREAD_CC="$CC"
+
+AC_SUBST([PTHREAD_LIBS])
+AC_SUBST([PTHREAD_CFLAGS])
+AC_SUBST([PTHREAD_CC])
+
+# Finally, execute ACTION-IF-FOUND/ACTION-IF-NOT-FOUND:
+if test "x$ax_pthread_ok" = "xyes"; then
+        ifelse([$1],,[AC_DEFINE([HAVE_PTHREAD],[1],[Define if you have POSIX threads libraries and header files.])],[$1])
+        :
+else
+        ax_pthread_ok=no
+        $2
+fi
+AC_LANG_POP
+])
 m4trace:configure.ac:3: -1- m4_pattern_forbid([^_?A[CHUM]_])
 m4trace:configure.ac:3: -1- m4_pattern_forbid([_AC_])
 m4trace:configure.ac:3: -1- m4_pattern_forbid([^LIBOBJS$], [do not use LIBOBJS directly, use AC_LIBOBJ (see section `AC_LIBOBJ vs LIBOBJS'])
@@ -2657,7 +3059,7 @@ m4trace:configure.ac:5: -1- AC_CONFIG_MACRO_DIR([m4])
 m4trace:configure.ac:7: -1- AM_INIT_AUTOMAKE
 m4trace:configure.ac:7: -1- m4_pattern_allow([^AM_[A-Z]+FLAGS$])
 m4trace:configure.ac:7: -1- AM_SET_CURRENT_AUTOMAKE_VERSION
-m4trace:configure.ac:7: -1- AM_AUTOMAKE_VERSION([1.15])
+m4trace:configure.ac:7: -1- AM_AUTOMAKE_VERSION([1.15.1])
 m4trace:configure.ac:7: -1- _AM_AUTOCONF_VERSION([2.69])
 m4trace:configure.ac:7: -1- m4_pattern_allow([^INSTALL_PROGRAM$])
 m4trace:configure.ac:7: -1- m4_pattern_allow([^INSTALL_SCRIPT$])
@@ -2900,110 +3302,124 @@ m4trace:configure.ac:61: -1- m4_pattern_allow([^PRIVSEP_DIR$])
 m4trace:configure.ac:64: -1- m4_pattern_allow([^PRIVSEP_DIR_USER$])
 m4trace:configure.ac:67: -1- m4_pattern_allow([^PRIVSEP_DIR_GROUP$])
 m4trace:configure.ac:77: -1- m4_pattern_allow([^WITHOUT_DEBUGFILE$])
-m4trace:configure.ac:96: -1- m4_pattern_allow([^HAVE_LIBIPHLPAPI$])
-m4trace:configure.ac:97: -1- m4_pattern_allow([^HAVE_LIBWS2_32$])
-m4trace:configure.ac:100: -1- m4_pattern_allow([^STDC_HEADERS$])
-m4trace:configure.ac:101: -1- m4_pattern_allow([^HAVE_SYS_WAIT_H$])
-m4trace:configure.ac:102: -1- m4_pattern_allow([^TIME_WITH_SYS_TIME$])
-m4trace:configure.ac:103: -1- m4_pattern_allow([^HAVE_ARPA_INET_H$])
-m4trace:configure.ac:104: -1- m4_pattern_allow([^HAVE_FCNTL_H$])
-m4trace:configure.ac:105: -1- m4_pattern_allow([^HAVE_LIMITS_H$])
-m4trace:configure.ac:106: -1- m4_pattern_allow([^HAVE_NETDB_H$])
-m4trace:configure.ac:107: -1- m4_pattern_allow([^HAVE_NET_IF_DL_H$])
-m4trace:configure.ac:108: -1- m4_pattern_allow([^HAVE_NET_IF_TYPES_H$])
-m4trace:configure.ac:109: -1- m4_pattern_allow([^HAVE_NETINET_IN_H$])
-m4trace:configure.ac:110: -1- m4_pattern_allow([^HAVE_POLL_H$])
-m4trace:configure.ac:111: -1- m4_pattern_allow([^HAVE_STDINT_H$])
-m4trace:configure.ac:112: -1- m4_pattern_allow([^HAVE_STDLIB_H$])
-m4trace:configure.ac:113: -1- m4_pattern_allow([^HAVE_STRING_H$])
-m4trace:configure.ac:114: -1- m4_pattern_allow([^HAVE_SYS_EPOLL_H$])
-m4trace:configure.ac:115: -1- m4_pattern_allow([^HAVE_SYS_EVENT_H$])
-m4trace:configure.ac:116: -1- m4_pattern_allow([^HAVE_SYS_IOCTL_H$])
-m4trace:configure.ac:117: -1- m4_pattern_allow([^HAVE_SYS_PARAM_H$])
-m4trace:configure.ac:118: -1- m4_pattern_allow([^HAVE_SYS_SOCKET_H$])
-m4trace:configure.ac:119: -1- m4_pattern_allow([^HAVE_SYS_TIME_H$])
-m4trace:configure.ac:120: -1- m4_pattern_allow([^HAVE_UNISTD_H$])
-m4trace:configure.ac:121: -1- m4_pattern_allow([^HAVE_IFADDRS_H$])
-m4trace:configure.ac:124: -1- m4_pattern_allow([^HAVE_SYS_SYSCTL_H$])
-m4trace:configure.ac:149: -1- m4_pattern_allow([^HAVE_NETINET_TCP_VAR_H$])
-m4trace:configure.ac:164: -1- m4_pattern_allow([^HAVE_NET_PFVAR_H$])
-m4trace:configure.ac:173: -1- m4_pattern_allow([^const$])
-m4trace:configure.ac:174: -1- m4_pattern_allow([^uid_t$])
-m4trace:configure.ac:174: -1- m4_pattern_allow([^gid_t$])
-m4trace:configure.ac:175: -1- m4_pattern_allow([^int16_t$])
-m4trace:configure.ac:176: -1- m4_pattern_allow([^int32_t$])
-m4trace:configure.ac:177: -1- m4_pattern_allow([^mode_t$])
-m4trace:configure.ac:178: -1- m4_pattern_allow([^off_t$])
-m4trace:configure.ac:179: -1- m4_pattern_allow([^pid_t$])
-m4trace:configure.ac:180: -1- m4_pattern_allow([^size_t$])
-m4trace:configure.ac:181: -1- m4_pattern_allow([^ssize_t$])
-m4trace:configure.ac:182: -1- m4_pattern_allow([^TM_IN_SYS_TIME$])
-m4trace:configure.ac:183: -1- m4_pattern_allow([^uint16_t$])
-m4trace:configure.ac:184: -1- m4_pattern_allow([^_UINT32_T$])
-m4trace:configure.ac:184: -1- m4_pattern_allow([^uint32_t$])
-m4trace:configure.ac:185: -1- m4_pattern_allow([^_UINT64_T$])
-m4trace:configure.ac:185: -1- m4_pattern_allow([^uint64_t$])
-m4trace:configure.ac:186: -1- m4_pattern_allow([^_UINT8_T$])
-m4trace:configure.ac:186: -1- m4_pattern_allow([^uint8_t$])
-m4trace:configure.ac:189: -1- m4_pattern_allow([^HAVE_UNISTD_H$])
-m4trace:configure.ac:189: -1- m4_pattern_allow([^HAVE_CHOWN$])
-m4trace:configure.ac:190: -1- m4_pattern_allow([^HAVE_VFORK_H$])
-m4trace:configure.ac:190: -1- m4_pattern_allow([^HAVE_WORKING_VFORK$])
-m4trace:configure.ac:190: -1- m4_pattern_allow([^vfork$])
-m4trace:configure.ac:190: -1- m4_pattern_allow([^HAVE_WORKING_FORK$])
-m4trace:configure.ac:191: -1- m4_pattern_allow([^HAVE_ARC4RANDOM$])
-m4trace:configure.ac:192: -1- m4_pattern_allow([^HAVE_ARC4RANDOM_UNIFORM$])
-m4trace:configure.ac:193: -1- m4_pattern_allow([^HAVE_ATEXIT$])
-m4trace:configure.ac:194: -1- m4_pattern_allow([^HAVE_CALLOC$])
-m4trace:configure.ac:195: -1- m4_pattern_allow([^HAVE_DAEMON$])
-m4trace:configure.ac:196: -1- m4_pattern_allow([^HAVE_ENDPWENT$])
-m4trace:configure.ac:197: -1- m4_pattern_allow([^HAVE_EPOLL_WAIT$])
-m4trace:configure.ac:198: -1- m4_pattern_allow([^HAVE_FTRUNCATE$])
-m4trace:configure.ac:199: -1- m4_pattern_allow([^HAVE_GETDTABLESIZE$])
-m4trace:configure.ac:200: -1- m4_pattern_allow([^HAVE_GETHOSTNAME$])
-m4trace:configure.ac:201: -1- m4_pattern_allow([^HAVE_GETIFADDRS$])
-m4trace:configure.ac:202: -1- m4_pattern_allow([^HAVE_GETPAGESIZE$])
-m4trace:configure.ac:203: -1- m4_pattern_allow([^HAVE_GETTIMEOFDAY$])
-m4trace:configure.ac:204: -1- m4_pattern_allow([^HAVE_KQUEUE$])
-m4trace:configure.ac:205: -1- m4_pattern_allow([^HAVE_MEMMOVE$])
-m4trace:configure.ac:206: -1- m4_pattern_allow([^HAVE_MEMSET$])
-m4trace:configure.ac:207: -1- m4_pattern_allow([^HAVE_MKDIR$])
-m4trace:configure.ac:208: -1- m4_pattern_allow([^HAVE_POLL$])
-m4trace:configure.ac:209: -1- m4_pattern_allow([^HAVE_RMDIR$])
-m4trace:configure.ac:210: -1- m4_pattern_allow([^HAVE_SELECT$])
-m4trace:configure.ac:211: -1- m4_pattern_allow([^HAVE_SOCKET$])
-m4trace:configure.ac:212: -1- m4_pattern_allow([^HAVE_SNPRINTF$])
-m4trace:configure.ac:213: -1- m4_pattern_allow([^HAVE_SETPROCTITLE$])
-m4trace:configure.ac:214: -1- m4_pattern_allow([^HAVE_STRCASECMP$])
-m4trace:configure.ac:215: -1- m4_pattern_allow([^HAVE_STRCASESTR$])
-m4trace:configure.ac:216: -1- m4_pattern_allow([^HAVE_STRDUP$])
-m4trace:configure.ac:217: -1- m4_pattern_allow([^HAVE_STRERROR$])
-m4trace:configure.ac:218: -1- m4_pattern_allow([^HAVE_STRNCASECMP$])
-m4trace:configure.ac:219: -1- m4_pattern_allow([^HAVE_STRTOL$])
-m4trace:configure.ac:220: -1- m4_pattern_allow([^HAVE_UNAME$])
-m4trace:configure.ac:222: -1- m4_pattern_allow([^SIZEOF_LONG$])
-m4trace:configure.ac:224: -1- m4_pattern_allow([^HAVE_STRUCT_SOCKADDR_SA_LEN$])
-m4trace:configure.ac:231: -1- m4_pattern_allow([^HAVE_STRUCT_PFIOC_TRANS_E_TYPE$])
-m4trace:configure.ac:239: -1- m4_pattern_allow([^HAVE_STRUCT_PFIOC_TRANS_E_RS_NUM$])
-m4trace:configure.ac:247: -1- m4_pattern_allow([^HAVE_STRUCT_PF_RULE_NAT$])
-m4trace:configure.ac:255: -1- m4_pattern_allow([^HAVE_STRUCT_PF_RULE_RDR$])
-m4trace:configure.ac:267: -1- m4_pattern_allow([^HAVE_STRUCT_IP6_EXT$])
-m4trace:configure.ac:288: -1- AX_CHECK_OPENSSL([AC_DEFINE([HAVE_OPENSSL], [1], [Define to 1 if you have OpenSSL])
+m4trace:configure.ac:102: -1- AM_CONDITIONAL([WITH_SC_UPTIME], [test x$with_sc_uptime = xyes])
+m4trace:configure.ac:102: -1- m4_pattern_allow([^WITH_SC_UPTIME_TRUE$])
+m4trace:configure.ac:102: -1- m4_pattern_allow([^WITH_SC_UPTIME_FALSE$])
+m4trace:configure.ac:102: -1- _AM_SUBST_NOTMAKE([WITH_SC_UPTIME_TRUE])
+m4trace:configure.ac:102: -1- _AM_SUBST_NOTMAKE([WITH_SC_UPTIME_FALSE])
+m4trace:configure.ac:105: -1- m4_pattern_allow([^HAVE_LIBIPHLPAPI$])
+m4trace:configure.ac:106: -1- m4_pattern_allow([^HAVE_LIBWS2_32$])
+m4trace:configure.ac:109: -1- m4_pattern_allow([^STDC_HEADERS$])
+m4trace:configure.ac:110: -1- m4_pattern_allow([^HAVE_SYS_WAIT_H$])
+m4trace:configure.ac:111: -1- m4_pattern_allow([^TIME_WITH_SYS_TIME$])
+m4trace:configure.ac:112: -1- m4_pattern_allow([^HAVE_ARPA_INET_H$])
+m4trace:configure.ac:113: -1- m4_pattern_allow([^HAVE_FCNTL_H$])
+m4trace:configure.ac:114: -1- m4_pattern_allow([^HAVE_LIMITS_H$])
+m4trace:configure.ac:115: -1- m4_pattern_allow([^HAVE_NETDB_H$])
+m4trace:configure.ac:116: -1- m4_pattern_allow([^HAVE_NET_IF_DL_H$])
+m4trace:configure.ac:117: -1- m4_pattern_allow([^HAVE_NET_IF_TYPES_H$])
+m4trace:configure.ac:118: -1- m4_pattern_allow([^HAVE_NETINET_IN_H$])
+m4trace:configure.ac:119: -1- m4_pattern_allow([^HAVE_POLL_H$])
+m4trace:configure.ac:120: -1- m4_pattern_allow([^HAVE_STDINT_H$])
+m4trace:configure.ac:121: -1- m4_pattern_allow([^HAVE_STDLIB_H$])
+m4trace:configure.ac:122: -1- m4_pattern_allow([^HAVE_STRING_H$])
+m4trace:configure.ac:123: -1- m4_pattern_allow([^HAVE_SYS_EPOLL_H$])
+m4trace:configure.ac:124: -1- m4_pattern_allow([^HAVE_SYS_EVENT_H$])
+m4trace:configure.ac:125: -1- m4_pattern_allow([^HAVE_SYS_IOCTL_H$])
+m4trace:configure.ac:126: -1- m4_pattern_allow([^HAVE_SYS_PARAM_H$])
+m4trace:configure.ac:127: -1- m4_pattern_allow([^HAVE_SYS_SOCKET_H$])
+m4trace:configure.ac:128: -1- m4_pattern_allow([^HAVE_SYS_TIME_H$])
+m4trace:configure.ac:129: -1- m4_pattern_allow([^HAVE_UNISTD_H$])
+m4trace:configure.ac:130: -1- m4_pattern_allow([^HAVE_IFADDRS_H$])
+m4trace:configure.ac:133: -1- m4_pattern_allow([^HAVE_SYS_SYSCTL_H$])
+m4trace:configure.ac:158: -1- m4_pattern_allow([^HAVE_NETINET_TCP_VAR_H$])
+m4trace:configure.ac:173: -1- m4_pattern_allow([^HAVE_NET_PFVAR_H$])
+m4trace:configure.ac:182: -1- m4_pattern_allow([^const$])
+m4trace:configure.ac:183: -1- m4_pattern_allow([^uid_t$])
+m4trace:configure.ac:183: -1- m4_pattern_allow([^gid_t$])
+m4trace:configure.ac:184: -1- m4_pattern_allow([^int16_t$])
+m4trace:configure.ac:185: -1- m4_pattern_allow([^int32_t$])
+m4trace:configure.ac:186: -1- m4_pattern_allow([^mode_t$])
+m4trace:configure.ac:187: -1- m4_pattern_allow([^off_t$])
+m4trace:configure.ac:188: -1- m4_pattern_allow([^pid_t$])
+m4trace:configure.ac:189: -1- m4_pattern_allow([^size_t$])
+m4trace:configure.ac:190: -1- m4_pattern_allow([^ssize_t$])
+m4trace:configure.ac:191: -1- m4_pattern_allow([^TM_IN_SYS_TIME$])
+m4trace:configure.ac:192: -1- m4_pattern_allow([^uint16_t$])
+m4trace:configure.ac:193: -1- m4_pattern_allow([^_UINT32_T$])
+m4trace:configure.ac:193: -1- m4_pattern_allow([^uint32_t$])
+m4trace:configure.ac:194: -1- m4_pattern_allow([^_UINT64_T$])
+m4trace:configure.ac:194: -1- m4_pattern_allow([^uint64_t$])
+m4trace:configure.ac:195: -1- m4_pattern_allow([^_UINT8_T$])
+m4trace:configure.ac:195: -1- m4_pattern_allow([^uint8_t$])
+m4trace:configure.ac:198: -1- m4_pattern_allow([^HAVE_UNISTD_H$])
+m4trace:configure.ac:198: -1- m4_pattern_allow([^HAVE_CHOWN$])
+m4trace:configure.ac:199: -1- m4_pattern_allow([^HAVE_VFORK_H$])
+m4trace:configure.ac:199: -1- m4_pattern_allow([^HAVE_WORKING_VFORK$])
+m4trace:configure.ac:199: -1- m4_pattern_allow([^vfork$])
+m4trace:configure.ac:199: -1- m4_pattern_allow([^HAVE_WORKING_FORK$])
+m4trace:configure.ac:200: -1- m4_pattern_allow([^HAVE_ARC4RANDOM$])
+m4trace:configure.ac:201: -1- m4_pattern_allow([^HAVE_ARC4RANDOM_UNIFORM$])
+m4trace:configure.ac:202: -1- m4_pattern_allow([^HAVE_ATEXIT$])
+m4trace:configure.ac:203: -1- m4_pattern_allow([^HAVE_CALLOC$])
+m4trace:configure.ac:204: -1- m4_pattern_allow([^HAVE_DAEMON$])
+m4trace:configure.ac:205: -1- m4_pattern_allow([^HAVE_ENDPWENT$])
+m4trace:configure.ac:206: -1- m4_pattern_allow([^HAVE_EPOLL_WAIT$])
+m4trace:configure.ac:207: -1- m4_pattern_allow([^HAVE_FTRUNCATE$])
+m4trace:configure.ac:208: -1- m4_pattern_allow([^HAVE_GETDTABLESIZE$])
+m4trace:configure.ac:209: -1- m4_pattern_allow([^HAVE_GETHOSTNAME$])
+m4trace:configure.ac:210: -1- m4_pattern_allow([^HAVE_GETIFADDRS$])
+m4trace:configure.ac:211: -1- m4_pattern_allow([^HAVE_GETPAGESIZE$])
+m4trace:configure.ac:212: -1- m4_pattern_allow([^HAVE_GETTIMEOFDAY$])
+m4trace:configure.ac:213: -1- m4_pattern_allow([^HAVE_KQUEUE$])
+m4trace:configure.ac:214: -1- m4_pattern_allow([^HAVE_MEMMOVE$])
+m4trace:configure.ac:215: -1- m4_pattern_allow([^HAVE_MEMSET$])
+m4trace:configure.ac:216: -1- m4_pattern_allow([^HAVE_MKDIR$])
+m4trace:configure.ac:217: -1- m4_pattern_allow([^HAVE_POLL$])
+m4trace:configure.ac:218: -1- m4_pattern_allow([^HAVE_RMDIR$])
+m4trace:configure.ac:219: -1- m4_pattern_allow([^HAVE_SELECT$])
+m4trace:configure.ac:220: -1- m4_pattern_allow([^HAVE_SOCKET$])
+m4trace:configure.ac:221: -1- m4_pattern_allow([^HAVE_SNPRINTF$])
+m4trace:configure.ac:222: -1- m4_pattern_allow([^HAVE_SETPROCTITLE$])
+m4trace:configure.ac:223: -1- m4_pattern_allow([^HAVE_STRCASECMP$])
+m4trace:configure.ac:224: -1- m4_pattern_allow([^HAVE_STRCASESTR$])
+m4trace:configure.ac:225: -1- m4_pattern_allow([^HAVE_STRDUP$])
+m4trace:configure.ac:226: -1- m4_pattern_allow([^HAVE_STRERROR$])
+m4trace:configure.ac:227: -1- m4_pattern_allow([^HAVE_STRNCASECMP$])
+m4trace:configure.ac:228: -1- m4_pattern_allow([^HAVE_STRTOL$])
+m4trace:configure.ac:229: -1- m4_pattern_allow([^HAVE_UNAME$])
+m4trace:configure.ac:231: -1- m4_pattern_allow([^SIZEOF_LONG$])
+m4trace:configure.ac:233: -1- m4_pattern_allow([^HAVE_STRUCT_SOCKADDR_SA_LEN$])
+m4trace:configure.ac:240: -1- m4_pattern_allow([^HAVE_STRUCT_PFIOC_TRANS_E_TYPE$])
+m4trace:configure.ac:248: -1- m4_pattern_allow([^HAVE_STRUCT_PFIOC_TRANS_E_RS_NUM$])
+m4trace:configure.ac:256: -1- m4_pattern_allow([^HAVE_STRUCT_PF_RULE_NAT$])
+m4trace:configure.ac:264: -1- m4_pattern_allow([^HAVE_STRUCT_PF_RULE_RDR$])
+m4trace:configure.ac:276: -1- m4_pattern_allow([^HAVE_STRUCT_IP6_EXT$])
+m4trace:configure.ac:297: -1- AX_CHECK_OPENSSL([AC_DEFINE([HAVE_OPENSSL], [1], [Define to 1 if you have OpenSSL])
 	CFLAGS="$CFLAGS $OPENSSL_INCLUDES"])
-m4trace:configure.ac:288: -1- m4_pattern_allow([^PKG_CONFIG$])
-m4trace:configure.ac:288: -1- m4_pattern_allow([^HAVE_OPENSSL$])
-m4trace:configure.ac:288: -1- m4_pattern_allow([^OPENSSL_INCLUDES$])
-m4trace:configure.ac:288: -1- m4_pattern_allow([^OPENSSL_LIBS$])
-m4trace:configure.ac:288: -1- m4_pattern_allow([^OPENSSL_LDFLAGS$])
-m4trace:configure.ac:292: -1- AX_GCC_BUILTIN([__builtin_clz])
-m4trace:configure.ac:292: -1- m4_pattern_allow([^HAVE___BUILTIN_CLZ$])
-m4trace:configure.ac:318: -1- m4_pattern_allow([^LIB@&t@OBJS$])
-m4trace:configure.ac:318: -1- m4_pattern_allow([^LTLIBOBJS$])
-m4trace:configure.ac:318: -1- AM_CONDITIONAL([am__EXEEXT], [test -n "$EXEEXT"])
-m4trace:configure.ac:318: -1- m4_pattern_allow([^am__EXEEXT_TRUE$])
-m4trace:configure.ac:318: -1- m4_pattern_allow([^am__EXEEXT_FALSE$])
-m4trace:configure.ac:318: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_TRUE])
-m4trace:configure.ac:318: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_FALSE])
-m4trace:configure.ac:318: -1- _AC_AM_CONFIG_HEADER_HOOK(["$ac_file"])
-m4trace:configure.ac:318: -1- _AM_OUTPUT_DEPENDENCY_COMMANDS
-m4trace:configure.ac:318: -1- _LT_PROG_LTMAIN
+m4trace:configure.ac:297: -1- m4_pattern_allow([^PKG_CONFIG$])
+m4trace:configure.ac:297: -1- m4_pattern_allow([^HAVE_OPENSSL$])
+m4trace:configure.ac:297: -1- m4_pattern_allow([^OPENSSL_INCLUDES$])
+m4trace:configure.ac:297: -1- m4_pattern_allow([^OPENSSL_LIBS$])
+m4trace:configure.ac:297: -1- m4_pattern_allow([^OPENSSL_LDFLAGS$])
+m4trace:configure.ac:301: -1- AX_GCC_BUILTIN([__builtin_clz])
+m4trace:configure.ac:301: -1- m4_pattern_allow([^HAVE___BUILTIN_CLZ$])
+m4trace:configure.ac:308: -1- AX_PTHREAD([AC_DEFINE([HAVE_PTHREAD], [1], [Define to 1 if you have pthread])])
+m4trace:configure.ac:308: -1- m4_pattern_allow([^ax_pthread_config$])
+m4trace:configure.ac:308: -1- m4_pattern_allow([^PTHREAD_CREATE_JOINABLE$])
+m4trace:configure.ac:308: -1- m4_pattern_allow([^HAVE_PTHREAD_PRIO_INHERIT$])
+m4trace:configure.ac:308: -1- m4_pattern_allow([^PTHREAD_CC$])
+m4trace:configure.ac:308: -1- m4_pattern_allow([^PTHREAD_LIBS$])
+m4trace:configure.ac:308: -1- m4_pattern_allow([^PTHREAD_CFLAGS$])
+m4trace:configure.ac:308: -1- m4_pattern_allow([^PTHREAD_CC$])
+m4trace:configure.ac:308: -1- m4_pattern_allow([^HAVE_PTHREAD$])
+m4trace:configure.ac:348: -1- m4_pattern_allow([^LIB@&t@OBJS$])
+m4trace:configure.ac:348: -1- m4_pattern_allow([^LTLIBOBJS$])
+m4trace:configure.ac:348: -1- AM_CONDITIONAL([am__EXEEXT], [test -n "$EXEEXT"])
+m4trace:configure.ac:348: -1- m4_pattern_allow([^am__EXEEXT_TRUE$])
+m4trace:configure.ac:348: -1- m4_pattern_allow([^am__EXEEXT_FALSE$])
+m4trace:configure.ac:348: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_TRUE])
+m4trace:configure.ac:348: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_FALSE])
+m4trace:configure.ac:348: -1- _AC_AM_CONFIG_HEADER_HOOK(["$ac_file"])
+m4trace:configure.ac:348: -1- _AM_OUTPUT_DEPENDENCY_COMMANDS
+m4trace:configure.ac:348: -1- _LT_PROG_LTMAIN
